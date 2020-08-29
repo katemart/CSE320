@@ -86,6 +86,14 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
     return EOF;
 }
 
+int str_comp(char *str1, char *str2) {
+    for(; *str1 != '\0' || *str2 != '\0'; str1++, str2++) {
+        if(*str1 != *str2)
+          return *str1 - *str2;
+    }
+  return 0;
+}
+
 /**
  * @brief Validates command line arguments passed to the program.
  * @details This function will validate all the arguments passed to the
@@ -108,5 +116,17 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
 int validargs(int argc, char **argv)
 {
     // TO BE IMPLEMENTED
-    return -1;
+    if(argc == 1)
+		return -1;
+	for(int i = 1; i < argc; i++) {
+        char *current_elem = *(argv + i);        //declaring a pointer that points to a char
+        if(str_comp(current_elem, "-h") == 0)
+            global_options = HELP_OPTION;
+        else if(str_comp(current_elem, "-g") == 0)
+            global_options = GENERATE_OPTION;
+        else if(str_comp(current_elem, "-d") == 0)
+            global_options = DETECT_OPTION;
+
+    }
+	return 0;
 }
