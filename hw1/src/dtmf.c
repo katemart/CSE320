@@ -94,6 +94,16 @@ int str_comp(char *str1, char *str2) {
   return 0;
 }
 
+int str_to_num(char *number) {
+    int n = 0;
+    for(; *number != '\0'; number++) {
+        if(*number < '0' || *number > '9')
+            return -1;
+        n = (n * 10) + (*number - '0');
+    }
+    return n;
+}
+
 /**
  * @brief Validates command line arguments passed to the program.
  * @details This function will validate all the arguments passed to the
@@ -113,20 +123,79 @@ int str_comp(char *str1, char *str2) {
  * `noise file`, `noise_level`, and `block_size` to contain values derived from
  * other option settings.
  */
-int validargs(int argc, char **argv)
-{
+int validargs(int argc, char **argv) {
     // TO BE IMPLEMENTED
+    int ret_value = -1;
     if(argc == 1)
 		return -1;
 	for(int i = 1; i < argc; i++) {
-        char *current_elem = *(argv + i);        //declaring a pointer that points to a char
-        if(str_comp(current_elem, "-h") == 0)
+        if(global_options == 0) {
+            char *current_elem = *(argv + i);        //pointer that points to start of a char in mem
+            if(str_comp(current_elem, "-h") == 0) {
             global_options = HELP_OPTION;
-        else if(str_comp(current_elem, "-g") == 0)
-            global_options = GENERATE_OPTION;
-        else if(str_comp(current_elem, "-d") == 0)
-            global_options = DETECT_OPTION;
+                ret_value = 0;
+            }
+            else if(str_comp(current_elem, "-g") == 0) {
+                global_options = GENERATE_OPTION;
+                int t_flag = 0;
+                int n_flag = 0;
+                int l_flag = 0;
+                if(argc == 2){
+                    audio_samples = 1000;
+                    noise_file = NULL;
+                    noise_level = 0;
+                }
+                for(int j = i++; j < argc; j++) {
+                    char *current_opt_elem = *(argv + j);
+                    debug("current opt elem, %s", current_opt_elem);
+                    if(str_comp(current_opt_elem, "-t") == 0) {
+                        if(t_flag == 0) {
+                            t_flag = 1;
+                            current_opt_elem = *(argv + (j+1));
+                            if(current_opt_elem != NULL) {
+                                int t_number = str_to_num(current_opt_elem);
+                                debug("int, %d", t_number);
+                                if(t_number >= 0 && t_number <= UINT32_MAX) {
+                                    audio_samples = t_number * 8;
+                                    ret_value = 0;
+                                }
+                            }
+                            else {
+                                ret_value = -1;
+                            }
+                        }
+                        else {
+                            ret_value = -1;
+                        }
+                    }
+                    else if(str_comp(current_opt_elem, "-n") == 0) {
+                        if(n_flag == 0) {
+                            current_opt_elem = *(argv + (j+1));
+                            if(current_opt_elem != NULL) {
+                                noise_file = current_opt_elem;
+                                ret_value = 0;
+                            }
+                            else {
+                                ret_value = -1;
+                            }
+                        }
+                        else {
+                            ret_value = -1;
+                        }
+                    }
+                    else if(str_comp(current_opt_elem, "-l") == 0)  {
+                        if(l_flag == 0) {
+                            current_opt_elem = *(argv + (j+1));
+                            if(current_opt_elem != NULL) {
+                                int l_number = str_to_num(current_opt_elem);
+                                ret_value = 0;
+                            }
+                        }
+                    }
+                }
 
+            }
+        }
     }
-	return 0;
+	return ret_value;
 }
