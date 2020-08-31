@@ -94,14 +94,22 @@ int str_comp(char *str1, char *str2) {
   return 0;
 }
 
-int str_to_num(char *number) {
+int str_to_num(char *str_number, int *number) {
     int n = 0;
-    for(; *number != '\0'; number++) {
-        if(*number < '0' || *number > '9')
-            return -1;
-        n = (n * 10) + (*number - '0');
+    int negative = 1;
+    if(*str_number == '-') {
+          negative = -1;
+          str_number++;
     }
-    return n;
+    for(; *str_number != '\0'; str_number++) {
+        if(*str_number >= '0' && *str_number <= '9')
+          n = (n * 10) + (*str_number - '0');
+        else {
+          return -1;
+        }
+    }
+  *number = n * negative;
+  return 0;
 }
 
 /**
@@ -125,7 +133,12 @@ int str_to_num(char *number) {
  */
 int validargs(int argc, char **argv) {
     // TO BE IMPLEMENTED
+    debug("%d", global_options);
     int ret_value = -1;
+    int msec_arg;
+    int level_arg;
+    char *noisefile_arg;
+    int blocksize_arg;
     if(argc == 1)
 		return -1;
 	for(int i = 1; i < argc; i++) {
@@ -153,12 +166,16 @@ int validargs(int argc, char **argv) {
                             t_flag = 1;
                             current_opt_elem = *(argv + (j+1));
                             if(current_opt_elem != NULL) {
-                                int t_number = str_to_num(current_opt_elem);
-                                debug("int, %d", t_number);
-                                if(t_number >= 0 && t_number <= UINT32_MAX) {
-                                    audio_samples = t_number * 8;
-                                    ret_value = 0;
+                                int converted_number;
+                                if(str_to_num(current_opt_elem, &converted_number) < 0) {
+                                    ret_value = -1;
+                                } else {
+                                    if(converted_number >= 0 && converted_number <= UINT32_MAX) {
+                                        msec_arg = converted_number * 8;
+                                        ret_value = 0;
+                                    }
                                 }
+
                             }
                             else {
                                 ret_value = -1;
@@ -170,9 +187,10 @@ int validargs(int argc, char **argv) {
                     }
                     else if(str_comp(current_opt_elem, "-n") == 0) {
                         if(n_flag == 0) {
+                            n_flag = 1;
                             current_opt_elem = *(argv + (j+1));
                             if(current_opt_elem != NULL) {
-                                noise_file = current_opt_elem;
+                                noisefile_arg = current_opt_elem;
                                 ret_value = 0;
                             }
                             else {
@@ -185,17 +203,74 @@ int validargs(int argc, char **argv) {
                     }
                     else if(str_comp(current_opt_elem, "-l") == 0)  {
                         if(l_flag == 0) {
+                            l_flag = 1;
                             current_opt_elem = *(argv + (j+1));
                             if(current_opt_elem != NULL) {
-                                int l_number = str_to_num(current_opt_elem);
-                                ret_value = 0;
+                                int converted_number;
+                                if(str_to_num(current_opt_elem, &converted_number) < 0) {
+                                    debug("%d", converted_number);
+                                    ret_value = -1;
+                                }
+                                else {
+                                    if(converted_number >= -30 && converted_number <= 30) {
+                                        debug("%d", converted_number);
+                                        level_arg = 10*log10(converted_number);
+                                        ret_value = 0;
+                                    }
+                                }
                             }
+                            else {
+                                ret_value = -1;
+                            }
+                        }
+                        else {
+                            ret_value = 1;
                         }
                     }
                 }
 
             }
+            else if(str_comp(current_elem, "-d") == 0) {
+                global_options = DETECT_OPTION;
+                int b_flag = 0;
+                if(argc == 2) {
+                    block_size = 100;
+                }
+                char *current_opt_elem = *(argv + 2);
+                debug("current elem, %s", current_opt_elem);
+                if(str_comp(current_opt_elem, "-b") == 0) {
+                    if(b_flag == 0) {
+                        b_flag = 1;
+                        current_opt_elem = *(argv + 3);
+                        debug("next curr elem, %s",current_opt_elem);
+                        if(current_opt_elem != NULL) {
+                            int converted_number;
+                            if(str_to_num(current_opt_elem, &converted_number) < 0) {
+                                ret_value = -1;
+                            }
+                            else {
+                                if(converted_number >= 10 && converted_number <= 1000) {
+                                    blocksize_arg = converted_number;
+                                    ret_value = 0;
+                                }
+                            }
+                        }
+                        else {
+                            ret_value = -1;
+                        }
+                    }
+                    else {
+                        ret_value = -1;
+                    }
+                }
+            }
         }
     }
-	return ret_value;
+    if(ret_value == 0) {
+        audio_samples = msec_arg;
+        noise_file = noisefile_arg;
+        noise_level = level_arg;
+        block_size = blocksize_arg;
+    }
+    return ret_value;
 }
