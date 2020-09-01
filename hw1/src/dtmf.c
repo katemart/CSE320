@@ -133,34 +133,36 @@ int str_to_num(char *str_number, int *number) {
  */
 int validargs(int argc, char **argv) {
     // TO BE IMPLEMENTED
-    debug("%d", global_options);
     int ret_value = -1;
     int msec_arg;
     int level_arg;
     char *noisefile_arg;
     int blocksize_arg;
+    int global_operation;
     if(argc == 1)
 		return -1;
 	for(int i = 1; i < argc; i++) {
         if(global_options == 0) {
             char *current_elem = *(argv + i);        //pointer that points to start of a char in mem
             if(str_comp(current_elem, "-h") == 0) {
-            global_options = HELP_OPTION;
+            global_operation = HELP_OPTION;
                 ret_value = 0;
             }
             else if(str_comp(current_elem, "-g") == 0) {
-                global_options = GENERATE_OPTION;
+                global_operation = GENERATE_OPTION;
                 int t_flag = 0;
                 int n_flag = 0;
                 int l_flag = 0;
                 if(argc == 2){
+                    global_options = GENERATE_OPTION;
                     audio_samples = 1000;
-                    noise_file = NULL;
+                    //noise_file = NULL;
                     noise_level = 0;
+                    return 0;
                 }
                 for(int j = i++; j < argc; j++) {
                     char *current_opt_elem = *(argv + j);
-                    debug("current opt elem, %s", current_opt_elem);
+                    //debug("%s", current_opt_elem);
                     if(str_comp(current_opt_elem, "-t") == 0) {
                         if(t_flag == 0) {
                             t_flag = 1;
@@ -168,21 +170,21 @@ int validargs(int argc, char **argv) {
                             if(current_opt_elem != NULL) {
                                 int converted_number;
                                 if(str_to_num(current_opt_elem, &converted_number) < 0) {
-                                    ret_value = -1;
+                                    return -1;
                                 } else {
                                     if(converted_number >= 0 && converted_number <= UINT32_MAX) {
                                         msec_arg = converted_number * 8;
+                                        if(msec_arg > UINT32_MAX)
+                                            return -1;
                                         ret_value = 0;
                                     }
+                                    else {
+                                        return -1;
+                                    }
                                 }
+                                j++;                //increment index to go to next flag
 
                             }
-                            else {
-                                ret_value = -1;
-                            }
-                        }
-                        else {
-                            ret_value = -1;
                         }
                     }
                     else if(str_comp(current_opt_elem, "-n") == 0) {
@@ -193,12 +195,7 @@ int validargs(int argc, char **argv) {
                                 noisefile_arg = current_opt_elem;
                                 ret_value = 0;
                             }
-                            else {
-                                ret_value = -1;
-                            }
-                        }
-                        else {
-                            ret_value = -1;
+                            j++;                 //increment index to go to next flag
                         }
                     }
                     else if(str_comp(current_opt_elem, "-l") == 0)  {
@@ -208,41 +205,46 @@ int validargs(int argc, char **argv) {
                             if(current_opt_elem != NULL) {
                                 int converted_number;
                                 if(str_to_num(current_opt_elem, &converted_number) < 0) {
-                                    debug("%d", converted_number);
-                                    ret_value = -1;
+                                    return -1;
                                 }
                                 else {
                                     if(converted_number >= -30 && converted_number <= 30) {
                                         debug("%d", converted_number);
-                                        level_arg = 10*log10(converted_number);
+                                        //level_arg = 10*log10(converted_number);
+                                        level_arg = round(pow(10,(converted_number/10.0)));
                                         ret_value = 0;
                                     }
+                                    else {
+                                        return -1;
+                                    }
                                 }
-                            }
-                            else {
-                                ret_value = -1;
+                                j++;                //increment index to go to next flag
                             }
                         }
-                        else {
-                            ret_value = 1;
-                        }
+                    }
+                    else {
+                        ret_value = -1;
                     }
                 }
 
             }
             else if(str_comp(current_elem, "-d") == 0) {
-                global_options = DETECT_OPTION;
+                global_operation = DETECT_OPTION;
                 int b_flag = 0;
-                if(argc == 2) {
+                if(argc > 4) {
+                    return -1;
+                }
+                else if(argc == 2) {
+                    global_options = DETECT_OPTION;
                     block_size = 100;
+                    return 0;
                 }
                 char *current_opt_elem = *(argv + 2);
-                debug("current elem, %s", current_opt_elem);
-                if(str_comp(current_opt_elem, "-b") == 0) {
+                //debug("current opt elem, %s", current_opt_elem);
+                if(current_opt_elem != NULL && str_comp(current_opt_elem, "-b") == 0) {
                     if(b_flag == 0) {
                         b_flag = 1;
                         current_opt_elem = *(argv + 3);
-                        debug("next curr elem, %s",current_opt_elem);
                         if(current_opt_elem != NULL) {
                             int converted_number;
                             if(str_to_num(current_opt_elem, &converted_number) < 0) {
@@ -253,20 +255,18 @@ int validargs(int argc, char **argv) {
                                     blocksize_arg = converted_number;
                                     ret_value = 0;
                                 }
+                                else {
+                                    return -1;
+                                }
                             }
                         }
-                        else {
-                            ret_value = -1;
-                        }
-                    }
-                    else {
-                        ret_value = -1;
                     }
                 }
             }
         }
     }
     if(ret_value == 0) {
+        global_options = global_operation;
         audio_samples = msec_arg;
         noise_file = noisefile_arg;
         noise_level = level_arg;
