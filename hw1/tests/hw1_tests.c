@@ -90,3 +90,41 @@ Test(basecode_tests_suite, goertzel_basic_test) {
     cr_assert((fabs(r1-0.5) < eps), "r1 was %f, should be 0.5", r1);
     cr_assert((fabs(r2) < eps), "r2 was %f, should be 0.0", r2);
 }
+
+/************************************KATHY'S UNIT TESTS************************************/
+Test(basecode_tests_suite, validargs_default_g) {
+    int argc = 2;
+    char *argv[] = {"bin/dtmf", "-g"};
+    int ret = validargs(argc, argv);
+    cr_assert_eq(ret, 0, "Invalid return for valid args.  Got: %d | Expected: %d",
+         ret, 0);
+    cr_assert(global_options & 0x02, "Generate mode bit wasn't set. Got: %x", global_options);
+    cr_assert_eq(audio_samples, 1000, "MSEC value not properly set. Got: %d | Expected: %d",
+         audio_samples, 1000);
+    // cr_assert_eq(noise_file, NULL,
+    //      "Variable 'noise_file' was not properly set.  Got: %s | Expected: %s",
+    //      noise_file, NULL);
+    cr_assert_eq(noise_level, 0, "Correct noise level not set. Got: %d | Expected: %d",
+         noise_level, 0);
+    cr_assert_eq(block_size, 0, "Block size not properly set. Got: %d | Expected: %d",
+         block_size, 0);
+}
+
+Test(basecode_tests_suite, validargs_invalid_flag) {
+    int argc = 5;
+    char *argv[] = {"bin/dtmf", "-g", "-t", "50", "-f"};
+    int ret = validargs(argc, argv);
+    cr_assert_eq(ret, -1, "Invalid return for valid args.  Got: %d | Expected: %d",
+         ret, -1);
+    cr_assert_eq(global_options, 0, "Correct bit not set. Got: %d | Expected: %d",
+         global_options, 0);
+    cr_assert_eq(audio_samples, 0, "MSEC value not properly set. Got: %d | Expected: %d",
+         audio_samples, 0);
+    // cr_assert_eq(noise_file, NULL,
+    //      "Variable 'noise_file' was not properly set.  Got: %s | Expected: %s",
+    //      noise_file, NULL);
+    cr_assert_eq(noise_level, 0, "Correct noise level not set. Got: %d | Expected: %d",
+         noise_level, 0);
+    cr_assert_eq(block_size, 0, "Block size not properly set. Got: %d | Expected: %d",
+         block_size, 0);
+}
