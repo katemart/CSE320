@@ -86,6 +86,7 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
     return EOF;
 }
 
+//string comparator helper function
 int str_comp(char *str1, char *str2) {
     for(; *str1 != '\0' || *str2 != '\0'; str1++, str2++) {
         if(*str1 != *str2)
@@ -94,6 +95,7 @@ int str_comp(char *str1, char *str2) {
   return 0;
 }
 
+//string to number helper function -- accounts for negative numbers; returns 0 or 1 along with converted number
 int str_to_num(char *str_number, int *number) {
     int n = 0;
     int negative = 1;
@@ -131,28 +133,35 @@ int str_to_num(char *str_number, int *number) {
  */
 int validargs(int argc, char **argv) {
     // TO BE IMPLEMENTED
+    //default return value is -1
     int ret_value = -1;
-    //vars used for globals
-    int msec_arg = 0;
-    int level_arg = 0;
-    char *noisefile_arg = NULL;
-    int blocksize_arg = 0;
-    int global_operation = 0;
-    //vars used to keep track of selections
+    //vars used for globals -- set to zero each time (from global vars)
+    int msec_arg = audio_samples;
+    int level_arg = noise_level;
+    char *noisefile_arg = noise_file;
+    int blocksize_arg = block_size;
+    int global_operation = global_options;
+    //vars used to keep track of selections (to avoid repeated flags)
     int t_flag = 0;
     int n_flag = 0;
     int l_flag = 0;
     int b_flag = 0;
+    //check if program is given with no args, if so invalid
     if(argc == 1)
 		return -1;
+    //otherwise traverse given args
 	for(int i = 1; i < argc; i++) {
+        //check if global option is zero (i.e., a global selection has been made)
         if(global_operation == 0) {
-            char *current_elem = *(argv + i);        //pointer that points to start of a char in mem
+            //if no selection has been made, get selection
+            char *current_elem = *(argv + i);                               //pointer that points to start of a char in mem
+            //check if selection is -h, if so step into help option
             if(str_comp(current_elem, "-h") == 0) {
             global_operation = HELP_OPTION;
                 ret_value = 0;
-            } else if(str_comp(current_elem, "-g") == 0) {
+            } else if(str_comp(current_elem, "-g") == 0) {                  //if selection is -g, step into generate option
                 global_operation = GENERATE_OPTION;
+                //if no args are given along with -g, set flags to default vals
                 if(argc == 2){
                     global_options = GENERATE_OPTION;
                     audio_samples = 1000 * 8;
@@ -160,15 +169,18 @@ int validargs(int argc, char **argv) {
                     noise_level = 0;
                     return 0;
                 }
+                //else traverse through args given with -g
                 for(int j = i++; j < argc; j++) {
                     char *current_opt_elem = *(argv + j);
-                    //debug("%s", current_opt_elem);
+                    //if -t, check that number is in range and if so set proper value
                     if(str_comp(current_opt_elem, "-t") == 0) {
+                        //set t_flag accordingly to avoid repeated selection
                         if(t_flag == 0) {
                             t_flag = 1;
                             current_opt_elem = *(argv + (j+1));
                             if(current_opt_elem != NULL) {
                                 int converted_number;
+                                //convert arg to number to check for range
                                 if(str_to_num(current_opt_elem, &converted_number) < 0) {
                                     return -1;
                                 } else {
@@ -179,12 +191,12 @@ int validargs(int argc, char **argv) {
                                         ret_value = 0;
                                     } else return -1;
                                 }
-                                j++;                //increment index to go to next flag
+                                j++;                                        //increment index to go to next flag
 
                             }
                         }
-                    }
-                    else if(str_comp(current_opt_elem, "-n") == 0) {
+                    } else if(str_comp(current_opt_elem, "-n") == 0) {      //if -n, set proper value
+                        //set n_flag accordingly to avoid repeated selection
                         if(n_flag == 0) {
                             n_flag = 1;
                             current_opt_elem = *(argv + (j+1));
@@ -194,13 +206,14 @@ int validargs(int argc, char **argv) {
                             }
                             j++;                 //increment index to go to next flag
                         }
-                    }
-                    else if(str_comp(current_opt_elem, "-l") == 0)  {
+                    } else if(str_comp(current_opt_elem, "-l") == 0)  {     //if -l, check that number is in range and set proper value
+                        //set l_flag accordingly to avoid repeated selection
                         if(l_flag == 0) {
                             l_flag = 1;
                             current_opt_elem = *(argv + (j+1));
                             if(current_opt_elem != NULL) {
                                 int converted_number;
+                                //convert arg to number to check for range
                                 if(str_to_num(current_opt_elem, &converted_number) < 0) {
                                     return -1;
                                 } else {
@@ -211,24 +224,28 @@ int validargs(int argc, char **argv) {
                                         ret_value = 0;
                                     } else return -1;
                                 }
-                                j++;                //increment index to go to next flag
+                                j++;                                        //increment index to go to next flag
                             }
                         }
-                    } else ret_value = -1;
+                    } else ret_value = -1;                                  //if anything other than -t, -l, -n is selected then invalid
                 }
 
-            } else if(str_comp(current_elem, "-d") == 0) {
+            } else if(str_comp(current_elem, "-d") == 0) {                  //if selection is -d, step into detect option
                 global_operation = DETECT_OPTION;
+                //if the args given are more than 4, its invalid for this option
                 if(argc > 4) {
                     return -1;
-                } else if(argc == 2) {
+                } else if(argc == 2) {                                      //if no args are given along with -d, set to defaults
                     global_options = DETECT_OPTION;
                     block_size = 100;
                     return 0;
                 }
+                //otherwise traverse through args
                 char *current_opt_elem = *(argv + 2);
                 //debug("current opt elem, %s", current_opt_elem);
+                //if -b, check that number is in range and set proper value
                 if(current_opt_elem != NULL && str_comp(current_opt_elem, "-b") == 0) {
+                    //set b_flag accordingly to avoid repeated selection
                     if(b_flag == 0) {
                         b_flag = 1;
                         current_opt_elem = *(argv + 3);
@@ -248,6 +265,7 @@ int validargs(int argc, char **argv) {
             }
         }
     }
+    //set global vars to value if valid
     if(ret_value == 0) {
         global_options = global_operation;
         audio_samples = msec_arg;
@@ -255,5 +273,6 @@ int validargs(int argc, char **argv) {
         noise_level = level_arg;
         block_size = blocksize_arg;
     }
+    //return either 0 or -1 (accordingly)
     return ret_value;
 }
