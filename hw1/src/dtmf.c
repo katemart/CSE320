@@ -104,9 +104,7 @@ int str_to_num(char *str_number, int *number) {
     for(; *str_number != '\0'; str_number++) {
         if(*str_number >= '0' && *str_number <= '9')
           n = (n * 10) + (*str_number - '0');
-        else {
-          return -1;
-        }
+        else return -1;
     }
   *number = n * negative;
   return 0;
@@ -134,28 +132,30 @@ int str_to_num(char *str_number, int *number) {
 int validargs(int argc, char **argv) {
     // TO BE IMPLEMENTED
     int ret_value = -1;
-    int msec_arg;
-    int level_arg;
-    char *noisefile_arg;
-    int blocksize_arg;
-    int global_operation;
+    //vars used for globals
+    int msec_arg = 0;
+    int level_arg = 0;
+    char *noisefile_arg = NULL;
+    int blocksize_arg = 0;
+    int global_operation = 0;
+    //vars used to keep track of selections
+    int t_flag = 0;
+    int n_flag = 0;
+    int l_flag = 0;
+    int b_flag = 0;
     if(argc == 1)
 		return -1;
 	for(int i = 1; i < argc; i++) {
-        if(global_options == 0) {
+        if(global_operation == 0) {
             char *current_elem = *(argv + i);        //pointer that points to start of a char in mem
             if(str_comp(current_elem, "-h") == 0) {
             global_operation = HELP_OPTION;
                 ret_value = 0;
-            }
-            else if(str_comp(current_elem, "-g") == 0) {
+            } else if(str_comp(current_elem, "-g") == 0) {
                 global_operation = GENERATE_OPTION;
-                int t_flag = 0;
-                int n_flag = 0;
-                int l_flag = 0;
                 if(argc == 2){
                     global_options = GENERATE_OPTION;
-                    audio_samples = 1000;
+                    audio_samples = 1000 * 8;
                     //noise_file = NULL;
                     noise_level = 0;
                     return 0;
@@ -173,14 +173,11 @@ int validargs(int argc, char **argv) {
                                     return -1;
                                 } else {
                                     if(converted_number >= 0 && converted_number <= UINT32_MAX) {
-                                        msec_arg = converted_number * 8;
-                                        if(msec_arg > UINT32_MAX)
-                                            return -1;
+                                        int calculated_value = converted_number * 8;
+                                        //CHECK FOR OVERFLOW WHEN MULTIPLIED BY 8
+                                        msec_arg = calculated_value;
                                         ret_value = 0;
-                                    }
-                                    else {
-                                        return -1;
-                                    }
+                                    } else return -1;
                                 }
                                 j++;                //increment index to go to next flag
 
@@ -206,35 +203,25 @@ int validargs(int argc, char **argv) {
                                 int converted_number;
                                 if(str_to_num(current_opt_elem, &converted_number) < 0) {
                                     return -1;
-                                }
-                                else {
+                                } else {
                                     if(converted_number >= -30 && converted_number <= 30) {
-                                        debug("%d", converted_number);
                                         //level_arg = 10*log10(converted_number);
-                                        level_arg = round(pow(10,(converted_number/10.0)));
+                                        //ratio = round(pow(10,(converted_number/10.0)));
+                                        level_arg = converted_number;
                                         ret_value = 0;
-                                    }
-                                    else {
-                                        return -1;
-                                    }
+                                    } else return -1;
                                 }
                                 j++;                //increment index to go to next flag
                             }
                         }
-                    }
-                    else {
-                        ret_value = -1;
-                    }
+                    } else ret_value = -1;
                 }
 
-            }
-            else if(str_comp(current_elem, "-d") == 0) {
+            } else if(str_comp(current_elem, "-d") == 0) {
                 global_operation = DETECT_OPTION;
-                int b_flag = 0;
                 if(argc > 4) {
                     return -1;
-                }
-                else if(argc == 2) {
+                } else if(argc == 2) {
                     global_options = DETECT_OPTION;
                     block_size = 100;
                     return 0;
@@ -249,15 +236,11 @@ int validargs(int argc, char **argv) {
                             int converted_number;
                             if(str_to_num(current_opt_elem, &converted_number) < 0) {
                                 ret_value = -1;
-                            }
-                            else {
+                            } else {
                                 if(converted_number >= 10 && converted_number <= 1000) {
                                     blocksize_arg = converted_number;
                                     ret_value = 0;
-                                }
-                                else {
-                                    return -1;
-                                }
+                                } else return -1;
                             }
                         }
                     }
