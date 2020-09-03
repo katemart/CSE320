@@ -99,7 +99,7 @@ Test(basecode_tests_suite, validargs_default_g) {
     cr_assert_eq(ret, 0, "Invalid return for valid args.  Got: %d | Expected: %d",
          ret, 0);
     cr_assert(global_options & 0x02, "Generate mode bit wasn't set. Got: %x", global_options);
-    cr_assert_eq(audio_samples, 1000, "MSEC value not properly set. Got: %d | Expected: %d",
+    cr_assert_eq(audio_samples, 8000, "Audio samples value not properly set. Got: %d | Expected: %d",
          audio_samples, 1000);
     // cr_assert_eq(noise_file, NULL,
     //      "Variable 'noise_file' was not properly set.  Got: %s | Expected: %s",
