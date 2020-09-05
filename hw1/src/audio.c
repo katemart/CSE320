@@ -5,16 +5,18 @@
 
 int read_bytes(FILE *in, int *result) {     // result = pointer
     int ret_val = 0;
+    //traverse 4 bytes at a time
     for(int i = 0; i < 4; i++) {
+        //get current byte
         int current = fgetc(in);
+        //if current byte is not EOF continue
         if(current != EOF) {
-            //debug("%d current", current);
+            //OR current value
             ret_val = ret_val | current;
+            //and shift left each time
             if(i < 3) {
                 ret_val = ret_val << 8;
             }
-            //debug("%d, ret_val", ret_val);
-            //debug("%d, audio magic", AUDIO_MAGIC);
         }
         else {
             return -1;
@@ -38,12 +40,12 @@ int audio_read_header(FILE *in, AUDIO_HEADER *hp) {
         return EOF;
     }
     hp -> data_offset = d_offset;
-    //get data size
-    int d_size;
-    if(read_bytes(in, &d_size) < 0) {
+    //skip data size
+    int skip;
+    if(read_bytes(in, &skip) < 0) {
         return EOF;
     }
-    hp -> data_size = d_size;
+    hp -> data_size = 0xffffffff;
     //get encoding
     int encode;
     if(read_bytes(in, &encode) < 0) {
@@ -76,11 +78,14 @@ int audio_read_header(FILE *in, AUDIO_HEADER *hp) {
 
 int write_bytes(FILE *out, int field) {
     int current;
-    int m_number = field;
+    int number = field;
+    //shift from letfmost (to the right) then decrement each time until zero
     for(int i = 24; i >= 0;) {
-        current = m_number >> i;
+        current = number >> i;
+        //put current byte in file
         int output = fputc(current, out);
         //debug("%d",output);
+        //if EOF then end
         if(output == EOF)
             return -1;
         i = i- 8;
@@ -90,6 +95,7 @@ int write_bytes(FILE *out, int field) {
 
 int audio_write_header(FILE *out, AUDIO_HEADER *hp) {
     // TO BE IMPLEMENTED
+    //check each header element (if EOF) else return 0
     if(write_bytes(out, hp -> magic_number) < 0)
         return EOF;
     if(write_bytes(out, hp -> data_offset) < 0)
@@ -107,10 +113,28 @@ int audio_write_header(FILE *out, AUDIO_HEADER *hp) {
 
 int audio_read_sample(FILE *in, int16_t *samplep) {
     // TO BE IMPLEMENTED
-    return EOF;
+    //get msb
+    int16_t msb = fgetc(in);
+    if(msb == EOF)
+        return EOF;
+    //get lsb
+    int16_t lsb = fgetc(in);
+    if(lsb == EOF)
+        return EOF;
+    //combine together into samplep
+    *samplep = (msb << 8) | lsb;
+    //debug("%x", *samplep);
+    return 0;
 }
 
 int audio_write_sample(FILE *out, int16_t sample) {
     // TO BE IMPLEMENTED
-    return EOF;
+    int16_t msb = fputc(sample >> 8, out);
+    if(msb == EOF)
+        return EOF;
+    int16_t lsb = fputc(sample, out);
+    if(lsb == EOF)
+        return EOF;
+    //debug("%d", sample);
+    return 0;
 }
