@@ -41,11 +41,12 @@ int audio_read_header(FILE *in, AUDIO_HEADER *hp) {
     }
     hp -> data_offset = d_offset;
     //skip data size
-    int skip;
-    if(read_bytes(in, &skip) < 0) {
+    int d_size;
+    if(read_bytes(in, &d_size) < 0) {
         return EOF;
     }
-    hp -> data_size = 0xffffffff;
+    hp -> data_size = d_size;
+    //hp -> data_size = 0xffffffff;
     //get encoding
     int encode;
     if(read_bytes(in, &encode) < 0) {
@@ -65,7 +66,8 @@ int audio_read_header(FILE *in, AUDIO_HEADER *hp) {
     }
     hp -> channels = chan;
     //check if the header is valid
-    if(m_number == AUDIO_MAGIC && encode == PCM16_ENCODING && chan == AUDIO_CHANNELS) {
+    if(m_number == AUDIO_MAGIC && encode == PCM16_ENCODING && s_rate == AUDIO_FRAME_RATE && chan == AUDIO_CHANNELS
+        && d_offset >= 24) {
         //move pointer to start of data (offset - header = annotation)
         //current pointer is at end of header, now move to after annotations end (which is start of data)
         int annotations = d_offset - 24;
@@ -114,11 +116,11 @@ int audio_write_header(FILE *out, AUDIO_HEADER *hp) {
 int audio_read_sample(FILE *in, int16_t *samplep) {
     // TO BE IMPLEMENTED
     //get msb
-    int16_t msb = fgetc(in);
+    int msb = fgetc(in);
     if(msb == EOF)
         return EOF;
     //get lsb
-    int16_t lsb = fgetc(in);
+    int lsb = fgetc(in);
     if(lsb == EOF)
         return EOF;
     //combine together into samplep
@@ -129,10 +131,10 @@ int audio_read_sample(FILE *in, int16_t *samplep) {
 
 int audio_write_sample(FILE *out, int16_t sample) {
     // TO BE IMPLEMENTED
-    int16_t msb = fputc(sample >> 8, out);
+    int msb = fputc(sample >> 8, out);
     if(msb == EOF)
         return EOF;
-    int16_t lsb = fputc(sample, out);
+    int lsb = fputc(sample, out);
     if(lsb == EOF)
         return EOF;
     //debug("%d", sample);
