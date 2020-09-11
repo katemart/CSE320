@@ -76,6 +76,11 @@ char line_buf[LINE_BUF_SIZE];
 GOERTZEL_STATE goertzel_state[NUM_DTMF_FREQS];
 
 /*
+ * Statically allocated array in which to store final strengths from Goertzel filter instances.
+ */
+double goertzel_strengths[NUM_DTMF_FREQS];
+
+/*
  * Below this line are prototypes for functions that MUST occur in your program.
  * Non-functioning stubs for all these functions have been provided in the various source
  * files, where detailed specifications for the required behavior of these functions have
