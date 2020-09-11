@@ -31,8 +31,34 @@
  * Variables to hold the pathname of the current file or directory
  * as well as other data have been pre-declared for you in const.h.
  * You must use those variables, rather than declaring your own.
- * IF YOU VIOLATE THIS RESTRICTION, YOU WILL GET A ZERO!
+ * IF YOU VIOLATE THIS RESTRICTION, YOU WILL GET A ZERO!/
  */
+
+//string to number helper function -- accounts for negative numbers; returns 0 or 1 along with converted number
+int str_to_num(char *str_number, int *number) {
+    int n = 0;
+    int negative = 1;
+    if(*str_number == '-') {
+          negative = -1;
+          str_number++;
+    }
+    for(; *str_number != '\0'; str_number++) {
+        if(*str_number >= '0' && *str_number <= '9')
+          n = (n * 10) + (*str_number - '0');
+        else return -1;
+    }
+  *number = n * negative;
+  return 0;
+}
+
+//string comparator helper function
+int str_comp(char *str1, char *str2) {
+    for(; *str1 != '\0' || *str2 != '\0'; str1++, str2++) {
+        if(*str1 != *str2)
+          return *str1 - *str2;
+    }
+  return 0;
+}
 
 /**
  * DTMF generation main function.
@@ -53,6 +79,45 @@
  */
 int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     // TO BE IMPLEMENTED
+    //debug("%s",fgets(line_buf, LINE_BUF_SIZE, events_in));
+    int prev_end = -1;
+    char *str = fgets(line_buf, LINE_BUF_SIZE, events_in);
+    while(str != NULL) {
+        //REMINDER: *(line_buf + i) is the same as line_buf[i] and line_buf = addr
+        //process one line at a time (i.e., line_buf until end of file)
+        //get start index
+        char *buf_p = line_buf;
+        int s_index, e_index;
+        for(char *current_p = line_buf; *current_p != '\0'; current_p++) {
+            if(*current_p == '\t') {
+                *current_p = '\0';
+                str_to_num(buf_p, &s_index);
+                buf_p = current_p + 1;
+                break;
+            }
+        }
+        //get end index
+        for(char *current_p = buf_p; *current_p != '\0'; current_p++) {
+            if(*current_p == '\t') {
+                *current_p = '\0';
+                str_to_num(buf_p, &e_index);
+                buf_p = current_p + 1;
+                break;
+            }
+        }
+        //get symbol and check that it is valid
+        char symbol = *buf_p;
+        //make sure start indices are incrementing and events do not overlap
+        if(s_index > e_index || s_index <= prev_end) {
+            return EOF;
+        }
+        prev_end = e_index;
+
+        debug("%d-%d %c", s_index, e_index, symbol);
+        debug("%d", prev_end);
+        //read next line from file
+        str = fgets(line_buf, LINE_BUF_SIZE, events_in);
+    }
     return EOF;
 }
 
@@ -84,32 +149,6 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
 int dtmf_detect(FILE *audio_in, FILE *events_out) {
     // TO BE IMPLEMENTED
     return EOF;
-}
-
-//string comparator helper function
-int str_comp(char *str1, char *str2) {
-    for(; *str1 != '\0' || *str2 != '\0'; str1++, str2++) {
-        if(*str1 != *str2)
-          return *str1 - *str2;
-    }
-  return 0;
-}
-
-//string to number helper function -- accounts for negative numbers; returns 0 or 1 along with converted number
-int str_to_num(char *str_number, int *number) {
-    int n = 0;
-    int negative = 1;
-    if(*str_number == '-') {
-          negative = -1;
-          str_number++;
-    }
-    for(; *str_number != '\0'; str_number++) {
-        if(*str_number >= '0' && *str_number <= '9')
-          n = (n * 10) + (*str_number - '0');
-        else return -1;
-    }
-  *number = n * negative;
-  return 0;
 }
 
 /**
