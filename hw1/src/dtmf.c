@@ -60,6 +60,22 @@ int str_comp(char *str1, char *str2) {
   return 0;
 }
 
+//function to look up given symbol in 2D mapping
+int find_symbol(char symbol, int *fr, int *fc) {
+    //mapping[i][j] = mapping[rows][columns]
+    for(int i = 0; i < NUM_DTMF_ROW_FREQS; i++) {
+        for(int j =  0; j < NUM_DTMF_COL_FREQS; j++) {
+            if(symbol == *(*(dtmf_symbol_names +i) +j)) {
+                //dtmf_freqs[fr], dtmf_freqs[fc + 4]
+                *fr = *(dtmf_freqs+i);
+                *fc = *(dtmf_freqs+(j+4));
+                return 0;
+            }
+        }
+    }
+    return -1;
+}
+
 /**
  * DTMF generation main function.
  * DTMF events are read (in textual tab-separated format) from the specified
@@ -79,9 +95,18 @@ int str_comp(char *str1, char *str2) {
  */
 int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     // TO BE IMPLEMENTED
-    //debug("%s",fgets(line_buf, LINE_BUF_SIZE, events_in));
+    int fr, fc;
     int prev_end = -1;
+    uint32_t data_size = length * 2;
     char *str = fgets(line_buf, LINE_BUF_SIZE, events_in);
+    //generate audio header
+    AUDIO_HEADER header = {AUDIO_MAGIC, AUDIO_DATA_OFFSET, data_size,
+        PCM16_ENCODING, AUDIO_FRAME_RATE, AUDIO_CHANNELS};
+    int write_header = audio_write_header(audio_out, &header);
+    if(write_header != 0) {
+        return EOF;
+    }
+    //generate samples
     while(str != NULL) {
         //REMINDER: *(line_buf + i) is the same as line_buf[i] and line_buf = addr
         //process one line at a time (i.e., line_buf until end of file)
@@ -112,9 +137,27 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
             return EOF;
         }
         prev_end = e_index;
+        //debug("%d-%d %c", s_index, e_index, symbol);
+        //debug("%d", prev_end);
+        //calculate each i
+        for(int i = s_index; i < e_index; i++) {
+            //get related i frequecy
+            if(find_symbol(symbol, &fr, &fc) < 0) {
+                return EOF;
+            }
+            //do calculations for each index and write to file
+            double fr_value = cos(2.0 * M_PI * fr * i / AUDIO_FRAME_RATE) * 0.5;
+            double fc_value = cos(2.0 * M_PI * fc * i / AUDIO_FRAME_RATE) * 0.5;
+            int16_t f_value = (int16_t)((fr_value + fc_value) * INT16_MAX);
+            int write_sample = audio_write_sample(audio_out, f_value);
+            if(write_sample != 0) {
+                return EOF;
+            }
+        }
+        //note to set the zero values (that arent in event), set anything thats
+        //between prev index and start index to zero
+        //debug("symbol %c, fr %d, fc %d", symbol, fr, fc);
 
-        debug("%d-%d %c", s_index, e_index, symbol);
-        debug("%d", prev_end);
         //read next line from file
         str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     }
@@ -223,9 +266,9 @@ int validargs(int argc, char **argv) {
                                 if(str_to_num(current_opt_elem, &converted_number) < 0) {
                                     return -1;
                                 } else {
-                                    if(converted_number >= 0 && converted_number <= UINT32_MAX) {
+                                    //divide UINT32_MAX by 8 to avoid overflow
+                                    if(converted_number >= 0 && converted_number <= (UINT32_MAX/8)) {
                                         int calculated_value = converted_number * 8;
-                                        //CHECK FOR OVERFLOW WHEN MULTIPLIED BY 8
                                         msec_arg = calculated_value;
                                         ret_value = 0;
                                     } else return -1;
