@@ -136,10 +136,20 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         if(s_index > e_index || s_index <= prev_end) {
             return EOF;
         }
-        prev_end = e_index;
         //debug("%d-%d %c", s_index, e_index, symbol);
+        /* note to set the zero values (that arent in event), set anything thats
+         * between prev index and start index to zero */
+        for(int i = prev_end; i < s_index; i++) {
+            int16_t f_value = 0;
+            int write_sample = audio_write_sample(audio_out, f_value);
+            if(write_sample != 0) {
+                return EOF;
+            }
+        }
+        //set current end index to be previous end index
+        prev_end = e_index;
         //debug("%d", prev_end);
-        //calculate each i
+        //calculate each i sample
         for(int i = s_index; i < e_index; i++) {
             //get related i frequecy
             if(find_symbol(symbol, &fr, &fc) < 0) {
@@ -154,14 +164,11 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
                 return EOF;
             }
         }
-        //note to set the zero values (that arent in event), set anything thats
-        //between prev index and start index to zero
         //debug("symbol %c, fr %d, fc %d", symbol, fr, fc);
-
         //read next line from file
         str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     }
-    return EOF;
+    return 0;
 }
 
 /**
