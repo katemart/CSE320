@@ -208,9 +208,10 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         //read next line from file
         str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     }
+    //close noise file
     fclose(fp);
+    //pad end of file with zeroes
     if(prev_end != -1) {
-        debug("hello");
         for(int i = prev_end; i < length; i++) {
             int16_t sample = 0;
             int write_sample = audio_write_sample(audio_out, sample);
@@ -253,6 +254,92 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
     return EOF;
 }
 
+//helper function for validation
+int extract_int_arg(char *arg, int *num_out) {
+    //if -1, no int arg so functionss fails
+    if(arg == NULL)
+        return -1;
+    else
+        return str_to_num(arg, num_out);
+}
+
+//generate args helper function
+int validate_generate_args(int argc, char **argv) {
+    //vars used for globals -- set to zero each time (from global vars)
+    int msec_arg = 1000 * 8;
+    int level_arg = 0;
+    char *noisefile_arg = noise_file;
+    //vars used to keep track of selections (to avoid repeated flags)
+    int t_flag = 0;
+    int n_flag = 0;
+    int l_flag = 0;
+    for(int i = 2; i < argc; i++) {
+        char *current = *(argv + i);
+        if(str_comp(current, "-t") == 0) {
+            //check if t_flag has been previously set, if not set to "true"
+            if(t_flag == 0) {
+                t_flag = 1;
+                //go to next arg (after -t)
+                current = *(argv + (i + 1));
+                if(extract_int_arg(current, &msec_arg) < 0)
+                    return -1;
+                else {
+                    //divide UINT32_MAX by 8 to avoid overflow
+                    if(msec_arg >= 0 && msec_arg <= (UINT32_MAX / 8))
+                        msec_arg = msec_arg * 8;
+                    else return -1;
+                }
+                i++;                    //increment index to go to next value
+            }
+        } else if(str_comp(current, "-n") == 0) {
+            //check if n_flag has been previously set, if not set to "true"
+            if(n_flag == 0) {
+                n_flag = 1;
+                current = *(argv + (i + 1));
+                if(current != NULL)
+                    noisefile_arg = current;
+                i++;                 //increment index to go to next flag
+            }
+        } else if(str_comp(current, "-l") == 0) {
+            //check if l_flag has been previously set, if not set to "true"
+            if(l_flag == 0) {
+                l_flag = 1;
+                current = *(argv + (i + 1));
+                if(extract_int_arg(current, &level_arg) < 0)
+                    return -1;
+                else if(level_arg < -30 && level_arg > 30)
+                    return -1;
+                i++;                 //increment index to go to next flag
+            }
+        } else {
+            return -1;
+        }
+    }
+    global_options = GENERATE_OPTION;
+    audio_samples = msec_arg;
+    noise_file = noisefile_arg;
+    noise_level = level_arg;
+    return 0;
+}
+
+//detect args helper function
+int validate_detect_args(int argc, char **argv) {
+    int blocksize_arg = 100;
+    char *current = *(argv + 2);
+    if(argc > 4)
+        return -1;
+    if(str_comp(current, "-b") == 0) {
+        current = *(argv + 3);
+        if(extract_int_arg(current, &blocksize_arg) < 0)
+            return -1;
+        else if(blocksize_arg < 10 && blocksize_arg > 1000)
+            return -1;
+    } else return -1;
+    global_options = DETECT_OPTION;
+    block_size = blocksize_arg;
+    return 0;
+}
+
 /**
  * @brief Validates command line arguments passed to the program.
  * @details This function will validate all the arguments passed to the
@@ -272,148 +359,22 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
  * `noise file`, `noise_level`, and `block_size` to contain values derived from
  * other option settings.
  */
-int validargs(int argc, char **argv) {
+int validargs(int argc, char **argv)
+{
+    char *cmd = *(argv + 1);
     // TO BE IMPLEMENTED
-    //default return value is -1
-    int ret_value = -1;
-    //vars used for globals -- set to zero each time (from global vars)
-    int msec_arg = audio_samples;
-    int level_arg = noise_level;
-    char *noisefile_arg = noise_file;
-    int blocksize_arg = block_size;
-    int global_operation = global_options;
-    //vars used to keep track of selections (to avoid repeated flags)
-    int t_flag = 0;
-    int n_flag = 0;
-    int l_flag = 0;
-    int b_flag = 0;
-    //check if program is given with no args, if so invalid
-    if(argc == 1)
-		return -1;
-    //otherwise traverse given args
-	for(int i = 1; i < argc; i++) {
-        //check if global option is zero (i.e., a global selection has been made)
-        if(global_operation == 0) {
-            //if no selection has been made, get selection
-            char *current_elem = *(argv + i);                               //pointer that points to start of a char in mem
-            //check if selection is -h, if so step into help option
-            if(str_comp(current_elem, "-h") == 0) {
-            global_operation = HELP_OPTION;
-                ret_value = 0;
-            } else if(str_comp(current_elem, "-g") == 0) {                  //if selection is -g, step into generate option
-                global_operation = GENERATE_OPTION;
-                //if no args are given along with -g, set flags to default vals
-                if(argc == 2){
-                    global_options = GENERATE_OPTION;
-                    audio_samples = 1000 * 8;
-                    //noise_file = NULL;
-                    noise_level = 0;
-                    return 0;
-                }
-                //else traverse through args given with -g
-                for(int j = i++; j < argc; j++) {
-                    char *current_opt_elem = *(argv + j);
-                    //if -t, check that number is in range and if so set proper value
-                    if(str_comp(current_opt_elem, "-t") == 0) {
-                        //set t_flag accordingly to avoid repeated selection
-                        if(t_flag == 0) {
-                            t_flag = 1;
-                            current_opt_elem = *(argv + (j+1));
-                            if(current_opt_elem != NULL) {
-                                int converted_number;
-                                //convert arg to number to check for range
-                                if(str_to_num(current_opt_elem, &converted_number) < 0) {
-                                    return -1;
-                                } else {
-                                    //divide UINT32_MAX by 8 to avoid overflow
-                                    if(converted_number >= 0 && converted_number <= (UINT32_MAX/8)) {
-                                        int calculated_value = converted_number * 8;
-                                        msec_arg = calculated_value;
-                                        ret_value = 0;
-                                    } else return -1;
-                                }
-                                j++;                                        //increment index to go to next flag
-
-                            }
-                        }
-                    } else if(str_comp(current_opt_elem, "-n") == 0) {      //if -n, set proper value
-                        //set n_flag accordingly to avoid repeated selection
-                        if(n_flag == 0) {
-                            n_flag = 1;
-                            current_opt_elem = *(argv + (j+1));
-                            if(current_opt_elem != NULL) {
-                                noisefile_arg = current_opt_elem;
-                                ret_value = 0;
-                            }
-                            j++;                 //increment index to go to next flag
-                        }
-                    } else if(str_comp(current_opt_elem, "-l") == 0)  {     //if -l, check that number is in range and set proper value
-                        //set l_flag accordingly to avoid repeated selection
-                        if(l_flag == 0) {
-                            l_flag = 1;
-                            current_opt_elem = *(argv + (j+1));
-                            if(current_opt_elem != NULL) {
-                                int converted_number;
-                                //convert arg to number to check for range
-                                if(str_to_num(current_opt_elem, &converted_number) < 0) {
-                                    return -1;
-                                } else {
-                                    if(converted_number >= -30 && converted_number <= 30) {
-                                        //level_arg = 10*log10(converted_number);
-                                        //ratio = round(pow(10,(converted_number/10.0)));
-                                        level_arg = converted_number;
-                                        ret_value = 0;
-                                    } else return -1;
-                                }
-                                j++;                                        //increment index to go to next flag
-                            }
-                        }
-                    } else ret_value = -1;                                  //if anything other than -t, -l, -n is selected then invalid
-                }
-
-            } else if(str_comp(current_elem, "-d") == 0) {                  //if selection is -d, step into detect option
-                global_operation = DETECT_OPTION;
-                //if the args given are more than 4, its invalid for this option
-                if(argc > 4) {
-                    return -1;
-                } else if(argc == 2) {                                      //if no args are given along with -d, set to defaults
-                    global_options = DETECT_OPTION;
-                    block_size = 100;
-                    return 0;
-                }
-                //otherwise traverse through args
-                char *current_opt_elem = *(argv + 2);
-                //debug("current opt elem, %s", current_opt_elem);
-                //if -b, check that number is in range and set proper value
-                if(current_opt_elem != NULL && str_comp(current_opt_elem, "-b") == 0) {
-                    //set b_flag accordingly to avoid repeated selection
-                    if(b_flag == 0) {
-                        b_flag = 1;
-                        current_opt_elem = *(argv + 3);
-                        if(current_opt_elem != NULL) {
-                            int converted_number;
-                            if(str_to_num(current_opt_elem, &converted_number) < 0) {
-                                ret_value = -1;
-                            } else {
-                                if(converted_number >= 10 && converted_number <= 1000) {
-                                    blocksize_arg = converted_number;
-                                    ret_value = 0;
-                                } else return -1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    if(str_comp(cmd, "-h") == 0) {
+        global_options = HELP_OPTION;
+        return 0;
+    } else if(str_comp(cmd, "-g") == 0) {
+        if(validate_generate_args(argc, argv) != 0)
+            return -1;
+    } else if(str_comp(cmd, "-d") == 0) {
+        if(validate_detect_args(argc, argv) != 0)
+            return -1;
+    } else {
+        return -1;
     }
-    //set global vars to value if valid
-    if(ret_value == 0) {
-        global_options = global_operation;
-        audio_samples = msec_arg;
-        noise_file = noisefile_arg;
-        noise_level = level_arg;
-        block_size = blocksize_arg;
-    }
-    //return either 0 or -1 (accordingly)
-    return ret_value;
+    return 0;
 }
+
