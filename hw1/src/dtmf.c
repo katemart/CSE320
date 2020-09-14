@@ -156,11 +156,13 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         //debug("%d-%d %c", s_index, e_index, symbol);
         /* note to set the zero values (that arent in event), set anything thats
          * between prev index and start index to zero */
-        for(int i = prev_end; i < s_index; i++) {
-            int16_t sample = 0;
-            int write_sample = audio_write_sample(audio_out, sample);
-            if(write_sample != 0) {
-                return EOF;
+        if(prev_end != -1) {
+            for(int i = prev_end; i < s_index; i++) {
+                int16_t sample = 0;
+                int write_sample = audio_write_sample(audio_out, sample);
+                if(write_sample != 0) {
+                    return EOF;
+                }
             }
         }
         //set current end index to be previous end index
@@ -208,8 +210,6 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         //read next line from file
         str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     }
-    //close noise file
-    fclose(fp);
     //pad end of file with zeroes
     if(prev_end != -1) {
         for(int i = prev_end; i < length; i++) {
@@ -219,6 +219,10 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
                 return EOF;
             }
         }
+    }
+    //close noise file
+    if(file_bool != 0) {
+        fclose(fp);
     }
     return 0;
 }
@@ -285,7 +289,7 @@ int validate_generate_args(int argc, char **argv) {
                     return -1;
                 else {
                     //divide UINT32_MAX by 8 to avoid overflow
-                    if(msec_arg >= 0 && msec_arg <= (UINT32_MAX / 8))
+                    if(msec_arg >= 0 && msec_arg <= UINT32_MAX)
                         msec_arg = msec_arg * 8;
                     else return -1;
                 }
