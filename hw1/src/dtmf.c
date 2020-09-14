@@ -208,7 +208,8 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         //read next line from file
         str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     }
-    /*if(prev_end != -1) {
+    fclose(fp);
+    if(prev_end != -1) {
         debug("hello");
         for(int i = prev_end; i < length; i++) {
             int16_t sample = 0;
@@ -217,7 +218,7 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
                 return EOF;
             }
         }
-    }*/
+    }
     return 0;
 }
 
@@ -248,6 +249,7 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
  */
 int dtmf_detect(FILE *audio_in, FILE *events_out) {
     // TO BE IMPLEMENTED
+
     return EOF;
 }
 
