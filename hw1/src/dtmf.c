@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
 
@@ -95,10 +94,28 @@ int find_symbol(char symbol, int *fr, int *fc) {
  */
 int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     // TO BE IMPLEMENTED
+    //note: length = audio_samples
+    //set other vars
+    FILE *fp;
     int fr, fc;
+    int file_bool = 0;
     int prev_end = -1;
     uint32_t data_size = length * 2;
     char *str = fgets(line_buf, LINE_BUF_SIZE, events_in);
+    //check if a noise file was given, if so mark boolean true
+    if(noise_file != NULL){
+        //if file cannot be opened return EOF else read samples
+        if((fp = fopen(noise_file, "r")) == NULL) {
+            return EOF;
+        }
+        //validate header from file first
+        AUDIO_HEADER file_header;
+        int read_header = audio_read_header(fp, &file_header);
+        if(read_header == EOF) {
+            return EOF;
+        }
+        file_bool = 1;
+    }
     //generate audio header
     AUDIO_HEADER header = {AUDIO_MAGIC, AUDIO_DATA_OFFSET, data_size,
         PCM16_ENCODING, AUDIO_FRAME_RATE, AUDIO_CHANNELS};
@@ -140,8 +157,8 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         /* note to set the zero values (that arent in event), set anything thats
          * between prev index and start index to zero */
         for(int i = prev_end; i < s_index; i++) {
-            int16_t f_value = 0;
-            int write_sample = audio_write_sample(audio_out, f_value);
+            int16_t sample = 0;
+            int write_sample = audio_write_sample(audio_out, sample);
             if(write_sample != 0) {
                 return EOF;
             }
@@ -158,16 +175,49 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
             //do calculations for each index and write to file
             double fr_value = cos(2.0 * M_PI * fr * i / AUDIO_FRAME_RATE) * 0.5;
             double fc_value = cos(2.0 * M_PI * fc * i / AUDIO_FRAME_RATE) * 0.5;
-            int16_t f_value = (int16_t)((fr_value + fc_value) * INT16_MAX);
-            int write_sample = audio_write_sample(audio_out, f_value);
-            if(write_sample != 0) {
-                return EOF;
+            int16_t dtmf_sample = (int16_t)((fr_value + fc_value) * INT16_MAX);
+            //check if noise file was given
+            if(file_bool != 0) {
+                //if header is successfully read, get samples from file
+                int16_t noise_sample;
+                int read_sample = audio_read_sample(fp, &noise_sample);
+                if(read_sample == EOF) {
+                    noise_sample = 0;
+                }
+                //if file sample is valid, combine with current sample
+                //w = (10^dB/10) / (1 + 10^dB/10)
+                double w = (pow(10,(noise_level/10)) / (1 + pow(10, noise_level/10)));
+                //debug("w is %f", w);
+                //weight noise_sample by w and dtmf_sample by 1-w
+                noise_sample = noise_sample * w;
+                dtmf_sample = dtmf_sample * (1 - w);
+                int16_t final_sample = noise_sample + dtmf_sample;
+                int write_sample = audio_write_sample(audio_out, final_sample);
+                if(write_sample != 0) {
+                    return EOF;
+                }
+            } else {
+                //if no noise file is given, write to stdout
+                int write_sample = audio_write_sample(audio_out, dtmf_sample);
+                if(write_sample != 0) {
+                    return EOF;
+                }
             }
         }
         //debug("symbol %c, fr %d, fc %d", symbol, fr, fc);
         //read next line from file
         str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     }
+    /*if(prev_end != -1) {
+        debug("hello");
+        for(int i = prev_end; i < length; i++) {
+            int16_t sample = 0;
+            int write_sample = audio_write_sample(audio_out, sample);
+            if(write_sample != 0) {
+                return EOF;
+            }
+        }
+    }*/
     return 0;
 }
 
