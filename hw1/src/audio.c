@@ -18,6 +18,7 @@ int read_bytes(FILE *in, int *result) {     // result = pointer
                 ret_val = ret_val << 8;
             }
         }
+        //if EOF return -i
         else {
             return -1;
         }
@@ -90,7 +91,8 @@ int write_bytes(FILE *out, int field) {
         //if EOF then end
         if(output == EOF)
             return -1;
-        i = i- 8;
+        //decrement i by one byte
+        i = i - 8;
     }
     return 0;
 }
