@@ -128,3 +128,63 @@ Test(basecode_tests_suite, validargs_invalid_flag) {
     cr_assert_eq(block_size, 0, "Block size not properly set. Got: %d | Expected: %d",
          block_size, 0);
 }
+
+Test(basecode_tests_suite, goertzel_advanced_test) {
+    //read header and set pointer to sample data start
+    AUDIO_HEADER header;
+    FILE *fp = fopen("./rsrc/dtmf_0_500ms.au", "r");
+    audio_read_header(fp, &header);
+    //goertzel init
+    int N = 1000;
+    double k0 = (double) 697/8000 * N;
+    double k1 = (double) 770/8000 * N;
+    double k2 = (double) 852/8000 * N;
+    double k3 = (double) 941/8000 * N;
+    double k4 = (double) 1209/8000 * N;
+    double k5 = (double) 1336/8000 * N;
+    double k6 = (double) 1477/8000 * N;
+    double k7 = (double) 1633/8000 * N;
+    GOERTZEL_STATE g0, g1, g2, g3, g4, g5, g6, g7;
+    goertzel_init(&g0, N, k0);
+    goertzel_init(&g1, N, k1);
+    goertzel_init(&g2, N, k2);
+    goertzel_init(&g3, N, k3);
+    goertzel_init(&g4, N, k4);
+    goertzel_init(&g5, N, k5);
+    goertzel_init(&g6, N, k6);
+    goertzel_init(&g7, N, k7);
+    //goertzel step
+    double x;
+    int16_t sample;
+    for(int i = 0; i < N-1; i++) {
+        audio_read_sample(fp, &sample);
+        x = (double) sample / INT16_MAX;
+        goertzel_step(&g0, x);
+        goertzel_step(&g1, x);
+        goertzel_step(&g2, x);
+        goertzel_step(&g3, x);
+        goertzel_step(&g4, x);
+        goertzel_step(&g5, x);
+        goertzel_step(&g6, x);
+        goertzel_step(&g7, x);
+    }
+    //goertzel strength
+    audio_read_sample(fp, &sample);
+    x = (double) sample / INT16_MAX;
+    double r0 = goertzel_strength(&g0, x);
+    double r1 = goertzel_strength(&g1, x);
+    double r2 = goertzel_strength(&g2, x);
+    double r3 = goertzel_strength(&g3, x);
+    double r4 = goertzel_strength(&g4, x);
+    double r5 = goertzel_strength(&g5, x);
+    double r6 = goertzel_strength(&g6, x);
+    double r7 = goertzel_strength(&g7, x);
+    cr_assert(r0, "r0 was %f, should be 0.000003", r0);
+    cr_assert(r1, "r1 was %f, should be 0.000007", r1);
+    cr_assert(r2, "r2 was %f, should be 0.000003", r2);
+    cr_assert(r3, "r3 was %f, should be 0.031544", r3);
+    cr_assert(r4, "r4 was %f, should be 0.000002", r4);
+    cr_assert(r5, "r5 was %f, should be 0.031479", r5);
+    cr_assert(r6, "r6 was %f, should be 0.000009", r6);
+    cr_assert(r7, "r7 was %f, should be 0.000001", r7);
+}
