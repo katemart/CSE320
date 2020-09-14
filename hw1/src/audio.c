@@ -46,7 +46,7 @@ int audio_read_header(FILE *in, AUDIO_HEADER *hp) {
     if(read_bytes(in, &d_size) < 0) {
         return EOF;
     }
-    hp -> data_size = d_size;
+    //hp -> data_size = d_size;
     //hp -> data_size = 0xffffffff;
     //get encoding
     int encode;
