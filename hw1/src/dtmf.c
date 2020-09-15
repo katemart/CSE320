@@ -75,6 +75,57 @@ int find_symbol(char symbol, int *fr, int *fc) {
     return -1;
 }
 
+//function to get start index, end index, symbol
+int get_event_fields(int *s_index, int *e_index, char *symbol) {
+    //REMINDER: *(line_buf + i) is the same as line_buf[i] and line_buf = addr
+    //process one line at a time (i.e., line_buf until end of file)
+    //get start index
+    char *buf_p = line_buf;
+    for(char *current_p = line_buf; *current_p != '\0'; current_p++) {
+        if(*current_p == '\t') {
+            *current_p = '\0';
+            str_to_num(buf_p, s_index);
+            buf_p = current_p + 1;
+            break;
+        }
+    }
+    //get end index
+    for(char *current_p = buf_p; *current_p != '\0'; current_p++) {
+        if(*current_p == '\t') {
+            *current_p = '\0';
+            str_to_num(buf_p, e_index);
+            buf_p = current_p + 1;
+            break;
+        }
+    }
+    //get symbol and check that it is valid
+    *symbol = *buf_p;
+    return 0;
+}
+
+//function to combine noise file with sample
+int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
+    //if header is successfully read, get samples from file
+    int16_t noise_sample;
+    int read_sample = audio_read_sample(fp, &noise_sample);
+    if(read_sample == EOF) {
+        noise_sample = 0;
+    }
+    //if file sample is valid, combine with current sample
+    //w = (10^dB/10) / (1 + 10^dB/10)
+    double w = (pow(10,(noise_level/10)) / (1 + pow(10, noise_level/10)));
+    //debug("w is %f", w);
+    //weight noise_sample by w and dtmf_sample by 1-w
+    noise_sample = noise_sample * w;
+    sample = sample * (1 - w);
+    int16_t final_sample = noise_sample + sample;
+    int write_sample = audio_write_sample(audio_out, final_sample);
+    if(write_sample != 0) {
+        return -1;
+    }
+    return 0;
+}
+
 /**
  * DTMF generation main function.
  * DTMF events are read (in textual tab-separated format) from the specified
@@ -97,9 +148,9 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     //note: length = audio_samples
     //set other vars
     FILE *fp;
-    int fr, fc;
     int file_bool = 0;
     int prev_end = -1;
+    int fr, fc, new_end_index;
     uint32_t data_size = length * 2;
     char *str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     //check if a noise file was given, if so mark boolean true
@@ -125,39 +176,22 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     }
     //generate samples
     while(str != NULL) {
-        //REMINDER: *(line_buf + i) is the same as line_buf[i] and line_buf = addr
-        //process one line at a time (i.e., line_buf until end of file)
-        //get start index
-        char *buf_p = line_buf;
+        //get event fields
+        char symbol;
         int s_index, e_index;
-        for(char *current_p = line_buf; *current_p != '\0'; current_p++) {
-            if(*current_p == '\t') {
-                *current_p = '\0';
-                str_to_num(buf_p, &s_index);
-                buf_p = current_p + 1;
-                break;
-            }
-        }
-        //get end index
-        for(char *current_p = buf_p; *current_p != '\0'; current_p++) {
-            if(*current_p == '\t') {
-                *current_p = '\0';
-                str_to_num(buf_p, &e_index);
-                buf_p = current_p + 1;
-                break;
-            }
-        }
-        //get symbol and check that it is valid
-        char symbol = *buf_p;
+        get_event_fields(&s_index, &e_index, &symbol);
         //make sure start indices are incrementing and events do not overlap
         if(s_index > e_index || s_index <= prev_end) {
             return EOF;
         }
-        //debug("%d-%d %c", s_index, e_index, symbol);
         /* note to set the zero values (that arent in event), set anything thats
          * between prev index and start index to zero */
         if(prev_end != -1) {
-            for(int i = prev_end; i < s_index; i++) {
+            //if length is less than end index, make length the new end index
+            if(length < s_index)
+                new_end_index = length;
+            else new_end_index = s_index;
+            for(int i = prev_end; i < new_end_index; i++) {
                 int16_t sample = 0;
                 int write_sample = audio_write_sample(audio_out, sample);
                 if(write_sample != 0) {
@@ -167,9 +201,12 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         }
         //set current end index to be previous end index
         prev_end = e_index;
-        //debug("%d", prev_end);
         //calculate each i sample
-        for(int i = s_index; i < e_index; i++) {
+        //if length is less than end index, make length the new end index
+        if(length < e_index)
+            new_end_index = length;
+        else new_end_index = e_index;
+        for(int i = s_index; i < new_end_index; i++) {
             //get related i frequecy
             if(find_symbol(symbol, &fr, &fc) < 0) {
                 return EOF;
@@ -180,33 +217,18 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
             int16_t dtmf_sample = (int16_t)((fr_value + fc_value) * INT16_MAX);
             //check if noise file was given
             if(file_bool != 0) {
-                //if header is successfully read, get samples from file
-                int16_t noise_sample;
-                int read_sample = audio_read_sample(fp, &noise_sample);
-                if(read_sample == EOF) {
-                    noise_sample = 0;
-                }
-                //if file sample is valid, combine with current sample
-                //w = (10^dB/10) / (1 + 10^dB/10)
-                double w = (pow(10,(noise_level/10)) / (1 + pow(10, noise_level/10)));
-                //debug("w is %f", w);
-                //weight noise_sample by w and dtmf_sample by 1-w
-                noise_sample = noise_sample * w;
-                dtmf_sample = dtmf_sample * (1 - w);
-                int16_t final_sample = noise_sample + dtmf_sample;
-                int write_sample = audio_write_sample(audio_out, final_sample);
-                if(write_sample != 0) {
+                //if so combine with current dtmf_sample
+                int combine = combine_noise_file(fp, audio_out, dtmf_sample);
+                if(combine != 0)
                     return EOF;
-                }
             } else {
-                //if no noise file is given, write to stdout
+                //if no noise file is given, write dtmf_sample to stdout
                 int write_sample = audio_write_sample(audio_out, dtmf_sample);
                 if(write_sample != 0) {
                     return EOF;
                 }
             }
         }
-        //debug("symbol %c, fr %d, fc %d", symbol, fr, fc);
         //read next line from file
         str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     }
@@ -226,6 +248,43 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     }
     return 0;
 }
+
+//helper function for determining frequency strengths
+int get_strengths(FILE *fp, int N) {
+    //goertzel init
+    for(int i = 0; i < NUM_DTMF_FREQS; i++) {
+        double k = (double) *(dtmf_freqs + i)/AUDIO_FRAME_RATE * N;
+        goertzel_init(goertzel_state + i, N, k);
+    }
+    //goertzel step
+    double x;
+    int16_t sample;
+    for(int i = 0; i < N-1; i++) {
+        int read_sample = audio_read_sample(fp, &sample);
+        if(read_sample != 0)
+            return -1;
+        else {
+            x = (double) sample/INT16_MAX;
+            for(int j = 0; j < NUM_DTMF_FREQS; j++) {
+                goertzel_step(goertzel_state + j, x);
+            }
+        }
+    }
+    //goertzel strength
+    audio_read_sample(fp, &sample);
+    x = (double) sample / INT16_MAX;
+    for(int i = 0; i < NUM_DTMF_FREQS; i++) {
+        double strength = goertzel_strength(goertzel_state + i, x);
+        *(goertzel_strengths + i) = strength;
+    }
+    for(int i = 0; i < NUM_DTMF_FREQS; i++) {
+        debug("%lf", *(goertzel_strengths + i));
+    }
+    return 0;
+}
+
+//helper function for finding greatest strengths
+
 
 /**
  * DTMF detection main function.
@@ -254,8 +313,16 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
  */
 int dtmf_detect(FILE *audio_in, FILE *events_out) {
     // TO BE IMPLEMENTED
+    //read and validate header from input stream
+    AUDIO_HEADER header;
+    int read_header = audio_read_header(audio_in, &header);
+        if(read_header == EOF) {
+            return EOF;
+        }
+    //read data in
+    get_strengths(audio_in, block_size);
 
-    return EOF;
+    return 0;
 }
 
 //helper function for validation
@@ -328,17 +395,21 @@ int validate_generate_args(int argc, char **argv) {
 
 //detect args helper function
 int validate_detect_args(int argc, char **argv) {
-    int blocksize_arg = 100;
-    char *current = *(argv + 2);
+    int blocksize_arg;
     if(argc > 4)
         return -1;
-    if(str_comp(current, "-b") == 0) {
-        current = *(argv + 3);
-        if(extract_int_arg(current, &blocksize_arg) < 0)
-            return -1;
-        else if(blocksize_arg < 10 && blocksize_arg > 1000)
-            return -1;
-    } else return -1;
+    else if(argc == 2)
+        blocksize_arg = DEFAULT_BLOCK_SIZE;
+    else {
+        char *current = *(argv + 2);
+        if(str_comp(current, "-b") == 0) {
+            current = *(argv + 3);
+            if(extract_int_arg(current, &blocksize_arg) < 0)
+                return -1;
+            else if(blocksize_arg < 10 && blocksize_arg > 1000)
+                return -1;
+        } else return -1;
+    }
     global_options = DETECT_OPTION;
     block_size = blocksize_arg;
     return 0;
