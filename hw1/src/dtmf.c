@@ -103,6 +103,19 @@ int get_event_fields(int *s_index, int *e_index, char *symbol) {
     return 0;
 }
 
+//function to check if a noise file has been given
+int check_file(FILE *fp) {
+    //check if file can be opened
+    if(fp == NULL)
+        return -1;
+    //if so, validate header to set ptr to sample data
+    AUDIO_HEADER file_header;
+    int read_header = audio_read_header(fp, &file_header);
+    if(read_header == EOF)
+        return -1;
+    return 1;
+}
+
 //function to combine noise file with sample
 int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
     //if header is successfully read, get samples from file
@@ -122,6 +135,25 @@ int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
     int write_sample = audio_write_sample(audio_out, final_sample);
     if(write_sample != 0) {
         return -1;
+    }
+    return 0;
+}
+
+int set_zero_padding(FILE *audio_out, FILE *fp, int file_bool, int start, int end) {
+    int16_t sample = 0;
+    for(int i = start; i < end; i++) {
+        if(file_bool != 0) {
+            //if so combine with zero sample
+            int combine = combine_noise_file(fp, audio_out, sample);
+            if(combine != 0)
+                return -1;
+        } else {
+            //else just pad with zeroes only
+            int write_sample = audio_write_sample(audio_out, sample);
+            if(write_sample != 0) {
+                return -1;
+            }
+        }
     }
     return 0;
 }
@@ -146,68 +178,51 @@ int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
 int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     // TO BE IMPLEMENTED
     //note: length = audio_samples
-    //set other vars
-    FILE *fp;
-    int file_bool = 0;
+    int fr, fc;
     int prev_end = -1;
-    int fr, fc, new_end_index;
-    uint32_t data_size = length * 2;
+    int new_end_index;
     char *str = fgets(line_buf, LINE_BUF_SIZE, events_in);
-    //check if a noise file was given, if so mark boolean true
-    if(noise_file != NULL){
-        //if file cannot be opened return EOF else read samples
-        if((fp = fopen(noise_file, "r")) == NULL) {
+    //check if a noise file has been given
+    FILE *fp = fopen(noise_file, "r");
+    int file_bool = 0;
+    if(noise_file != NULL) {
+        file_bool = check_file(fp);
+        if(file_bool != 1)
             return EOF;
-        }
-        //validate header from file first
-        AUDIO_HEADER file_header;
-        int read_header = audio_read_header(fp, &file_header);
-        if(read_header == EOF) {
-            return EOF;
-        }
-        file_bool = 1;
     }
     //generate audio header
+    uint32_t data_size = length * 2;
     AUDIO_HEADER header = {AUDIO_MAGIC, AUDIO_DATA_OFFSET, data_size,
         PCM16_ENCODING, AUDIO_FRAME_RATE, AUDIO_CHANNELS};
     int write_header = audio_write_header(audio_out, &header);
     if(write_header != 0) {
         return EOF;
     }
-    //generate samples
+    //generate samples by reading one line at a time
     while(str != NULL) {
-        //get event fields
+        //REMINDER: *(line_buf + i) is the same as line_buf[i] and line_buf = addr
+        //get DTMF event fields (ie. start & end indices and symbol)
         char symbol;
         int s_index, e_index;
         get_event_fields(&s_index, &e_index, &symbol);
-        //make sure start indices are incrementing and events do not overlap
-        if(s_index > e_index || s_index < prev_end) {
+        //make sure indices are incrementing and events do not overlap
+        if(s_index > e_index || s_index < prev_end)
             return EOF;
-        }
-        //if s_index is not zero, pad with zeroes until start index
+        //if first start index is not zero, set values before it to zero
         if(prev_end == -1 && s_index != 0) {
-            for(int i = 0; i < s_index; i++) {
-                int16_t sample = 0;
-                int write_sample = audio_write_sample(audio_out, sample);
-                if(write_sample != 0) {
-                    return EOF;
-                }
-            }
+            int padding = set_zero_padding(audio_out, fp, file_bool, 0, s_index);
+            if(padding != 0)
+                return EOF;
         }
-        /* note: to set the zero values (that arent in event), set anything thats
-         * between prev index and start index to zero */
+        // set in-between DTMF event gaps to zero
         if(prev_end != -1) {
             //if length is less than end index, make length the new end index
             if(length < s_index)
                 new_end_index = length;
             else new_end_index = s_index;
-            for(int i = prev_end; i < new_end_index; i++) {
-                int16_t sample = 0;
-                int write_sample = audio_write_sample(audio_out, sample);
-                if(write_sample != 0) {
-                    return EOF;
-                }
-            }
+            int padding = set_zero_padding(audio_out, fp, file_bool, prev_end, new_end_index);
+            if(padding != 0)
+                return EOF;
         }
         //set current end index to be previous end index
         prev_end = e_index;
@@ -244,17 +259,15 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     }
     //pad end of file with zeroes
     if(prev_end != -1) {
-        for(int i = prev_end; i < length; i++) {
-            int16_t sample = 0;
-            int write_sample = audio_write_sample(audio_out, sample);
-            if(write_sample != 0) {
-                return EOF;
-            }
-        }
+        int padding = set_zero_padding(audio_out, fp, file_bool, prev_end, length);
+        if(padding != 0)
+            return EOF;
     }
-    //close noise file
+    //close noise file (if any)
     if(file_bool != 0) {
-        fclose(fp);
+        int close = fclose(fp);
+        if(close != 0)
+            return EOF;
     }
     return 0;
 }
