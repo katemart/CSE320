@@ -181,10 +181,20 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         int s_index, e_index;
         get_event_fields(&s_index, &e_index, &symbol);
         //make sure start indices are incrementing and events do not overlap
-        if(s_index > e_index || s_index <= prev_end) {
+        if(s_index > e_index || s_index < prev_end) {
             return EOF;
         }
-        /* note to set the zero values (that arent in event), set anything thats
+        //if s_index is not zero, pad with zeroes until start index
+        if(prev_end == -1 && s_index != 0) {
+            for(int i = 0; i < s_index; i++) {
+                int16_t sample = 0;
+                int write_sample = audio_write_sample(audio_out, sample);
+                if(write_sample != 0) {
+                    return EOF;
+                }
+            }
+        }
+        /* note: to set the zero values (that arent in event), set anything thats
          * between prev index and start index to zero */
         if(prev_end != -1) {
             //if length is less than end index, make length the new end index
