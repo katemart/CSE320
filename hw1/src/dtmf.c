@@ -371,17 +371,22 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
     /*int16_t sample;
     audio_read_sample(audio_in, &sample);
     audio_write_sample(events_out, sample);*/
-    int i = 0;
-    while(!feof(audio_in)) {
-        i++;
-        debug("%d", i);
+    //int i = 0;
+    while(1) {
         int g_strengths = get_strengths(audio_in, block_size);
-        if(g_strengths != 0)
+        if(g_strengths != 0 && feof(audio_in))
+            break;
+        else if(g_strengths != 0)
             return EOF;
+        else {
+            //i++;
+            continue;
+        }
         int tone = check_tone();
         if(tone != 0)
             return EOF;
     }
+    //debug("%d", i);
     return 0;
 }
 
@@ -397,7 +402,7 @@ int extract_int_arg(char *arg, int *num_out) {
 //generate args helper function
 int validate_generate_args(int argc, char **argv) {
     //vars used for globals -- set to zero each time (from global vars)
-    uint32_t msec_arg = 1000 * 8;
+    int msec_arg = 1000 * 8;
     int level_arg = 0;
     char *noisefile_arg = noise_file;
     //vars used to keep track of selections (to avoid repeated flags)
@@ -415,8 +420,8 @@ int validate_generate_args(int argc, char **argv) {
                 if(extract_int_arg(current, (int*)&msec_arg) < 0)
                     return -1;
                 else {
-                    //divide UINT32_MAX by 8 to avoid overflow
-                    if(msec_arg >= 0 && msec_arg <= (UINT32_MAX >> 3))
+                    //divide INT32_MAX by 8 to avoid overflow of audio_samples
+                    if(msec_arg >= 0 && msec_arg <= (INT32_MAX >> 3))
                         msec_arg = msec_arg * 8;
                     else return -1;
                 }
