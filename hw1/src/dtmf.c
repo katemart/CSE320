@@ -127,11 +127,12 @@ int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
     //if file sample is valid, combine with current sample
     //w = (10^dB/10) / (1 + 10^dB/10)
     double w = (pow(10,(noise_level/10)) / (1 + pow(10, noise_level/10)));
-    //debug("w is %f", w);
+    debug("w is %f", w);
     //weight noise_sample by w and dtmf_sample by 1-w
     noise_sample = noise_sample * w;
     sample = sample * (1 - w);
     int16_t final_sample = noise_sample + sample;
+    //int write_sample = audio_write_sample(audio_out, final_sample/2);
     int write_sample = audio_write_sample(audio_out, final_sample);
     if(write_sample != 0) {
         return -1;
@@ -149,6 +150,7 @@ int set_zero_padding(FILE *audio_out, FILE *fp, int file_bool, int start, int en
                 return -1;
         } else {
             //else just pad with zeroes only
+            //int write_sample = audio_write_sample(audio_out, sample/2);
             int write_sample = audio_write_sample(audio_out, sample);
             if(write_sample != 0) {
                 return -1;
@@ -206,7 +208,7 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         int s_index, e_index;
         get_event_fields(&s_index, &e_index, &symbol);
         //make sure indices are incrementing and events do not overlap
-        if(s_index > e_index || s_index < prev_end)
+        if(s_index > e_index || s_index < prev_end || e_index > length)
             return EOF;
         //if first start index is not zero, set values before it to zero
         if(prev_end == -1 && s_index != 0) {
@@ -216,22 +218,14 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         }
         // set in-between DTMF event gaps to zero
         if(prev_end != -1) {
-            //if length is less than end index, make length the new end index
-            if(length < s_index)
-                new_end_index = length;
-            else new_end_index = s_index;
-            int padding = set_zero_padding(audio_out, fp, file_bool, prev_end, new_end_index);
+            int padding = set_zero_padding(audio_out, fp, file_bool, prev_end, s_index);
             if(padding != 0)
                 return EOF;
         }
         //set current end index to be previous end index
         prev_end = e_index;
         //calculate each i sample
-        //if length is less than end index, make length the new end index
-        if(length < e_index)
-            new_end_index = length;
-        else new_end_index = e_index;
-        for(int i = s_index; i < new_end_index; i++) {
+        for(int i = s_index; i < e_index; i++) {
             //get related i frequecy
             if(find_symbol(symbol, &fr, &fc) < 0) {
                 return EOF;
@@ -248,6 +242,7 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
                     return EOF;
             } else {
                 //if no noise file is given, write dtmf_sample to stdout
+                //int write_sample = audio_write_sample(audio_out, dtmf_sample/2);
                 int write_sample = audio_write_sample(audio_out, dtmf_sample);
                 if(write_sample != 0) {
                     return EOF;
