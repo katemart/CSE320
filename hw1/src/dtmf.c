@@ -47,6 +47,7 @@ int str_to_num(char *str_number, int *number) {
         else return -1;
     }
   *number = n * negative;
+  //debug("%d | %u", *number, *number);
   return 0;
 }
 
@@ -76,7 +77,7 @@ int find_symbol(char symbol, int *fr, int *fc) {
 }
 
 //function to get start index, end index, symbol
-int get_event_fields(int *s_index, int *e_index, char *symbol) {
+void get_event_fields(int *s_index, int *e_index, char *symbol) {
     //REMINDER: *(line_buf + i) is the same as line_buf[i] and line_buf = addr
     //process one line at a time (i.e., line_buf until end of file)
     //get start index
@@ -100,7 +101,6 @@ int get_event_fields(int *s_index, int *e_index, char *symbol) {
     }
     //get symbol and check that it is valid
     *symbol = *buf_p;
-    return 0;
 }
 
 //function to check if a noise file has been given
@@ -118,7 +118,7 @@ int check_file(FILE *fp) {
 
 //function to combine noise file with sample
 int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
-    //if header is successfully read, get samples from file
+    //if header is successfully read (when check_file), get samples from file
     int16_t noise_sample;
     int read_sample = audio_read_sample(fp, &noise_sample);
     if(read_sample == EOF) {
@@ -126,12 +126,9 @@ int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
     }
     //if file sample is valid, combine with current sample
     //w = (10^dB/10) / (1 + 10^dB/10)
-    double w = (pow(10,(noise_level/10)) / (1 + pow(10, noise_level/10)));
-    debug("w is %f", w);
-    //weight noise_sample by w and dtmf_sample by 1-w
-    noise_sample = noise_sample * w;
-    sample = sample * (1 - w);
-    int16_t final_sample = noise_sample + sample;
+    double w = (pow(10,(noise_level/10.0)) / (1 + pow(10, noise_level/10.0)));
+    int16_t final_sample = (noise_sample * w) + (sample * (1-w));
+    //debug("%lf \n", (noise_sample * w) + (sample * (1-w)));
     //int write_sample = audio_write_sample(audio_out, final_sample/2);
     int write_sample = audio_write_sample(audio_out, final_sample);
     if(write_sample != 0) {
@@ -182,7 +179,6 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     //note: length = audio_samples
     int fr, fc;
     int prev_end = -1;
-    int new_end_index;
     char *str = fgets(line_buf, LINE_BUF_SIZE, events_in);
     //check if a noise file has been given
     FILE *fp = fopen(noise_file, "r");
@@ -295,14 +291,46 @@ int get_strengths(FILE *fp, int N) {
         double strength = goertzel_strength(goertzel_state + i, x);
         *(goertzel_strengths + i) = strength;
     }
-    for(int i = 0; i < NUM_DTMF_FREQS; i++) {
+    /*for(int i = 0; i < NUM_DTMF_FREQS; i++) {
         debug("%lf", *(goertzel_strengths + i));
-    }
+    }*/
     return 0;
 }
 
 //helper function for finding greatest strengths
-
+int check_tone() {
+    double str_row = *(goertzel_strengths);
+    double str_col = *(goertzel_strengths + 4);
+    //determine strongest row/col freq component
+    //calculate "other row freq components"
+    double row_sum, col_sum;
+    for(int i = 0; i < NUM_DTMF_FREQS/2; i++) {
+        row_sum += *(goertzel_strengths + i);
+        if(*(goertzel_strengths + i) > str_row)
+            str_row = *(goertzel_strengths + i);
+    }
+    double str_row_ratio = str_row / (row_sum - str_row);
+    for(int i = NUM_DTMF_FREQS/2; i < NUM_DTMF_FREQS; i++) {
+        col_sum += *(goertzel_strengths + i);
+        if(*(goertzel_strengths + i) > str_col)
+            str_col = *(goertzel_strengths + i);
+    }
+    double str_col_ratio = str_col / (col_sum - str_col);
+    //final values
+    double sum = str_row + str_col;
+    double ratio = str_row / str_col;
+    //debug("%lf, %lf", str_row, str_col);
+    //debug("sum %lf, ratio %lf, str_row_ratio %lf, str_col_ratio %lf", sum, ratio, str_row_ratio, str_col_ratio);
+    //check if values are in range
+    if(sum < MINUS_20DB)
+        return -1;
+    if(ratio <= (1/FOUR_DB) || ratio >= FOUR_DB)
+        return -1;
+    //NOT SURE:
+    if(str_row_ratio < SIX_DB || str_col_ratio < SIX_DB)
+        return -1;
+    return 0;
+}
 
 /**
  * DTMF detection main function.
@@ -334,12 +362,24 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
     //read and validate header from input stream
     AUDIO_HEADER header;
     int read_header = audio_read_header(audio_in, &header);
-        if(read_header == EOF) {
+        if(read_header == EOF)
             return EOF;
-        }
-    //read data in
-    get_strengths(audio_in, block_size);
-
+    int write_header = audio_write_header(events_out, &header);
+        if(write_header == EOF)
+            return EOF;
+    /*int16_t sample;
+    audio_read_sample(audio_in, &sample);
+    audio_write_sample(events_out, sample);*/
+    while(1) {
+        int g_strengths = get_strengths(audio_in, block_size);
+        if(g_strengths != 0)
+            return EOF;
+        int tone = check_tone();
+        if(tone != 0)
+            return EOF;
+        if(feof(audio_in))
+            break ;
+    }
     return 0;
 }
 
@@ -355,7 +395,7 @@ int extract_int_arg(char *arg, int *num_out) {
 //generate args helper function
 int validate_generate_args(int argc, char **argv) {
     //vars used for globals -- set to zero each time (from global vars)
-    int msec_arg = 1000 * 8;
+    uint32_t msec_arg = 1000 * 8;
     int level_arg = 0;
     char *noisefile_arg = noise_file;
     //vars used to keep track of selections (to avoid repeated flags)
@@ -370,11 +410,11 @@ int validate_generate_args(int argc, char **argv) {
                 t_flag = 1;
                 //go to next arg (after -t)
                 current = *(argv + (i + 1));
-                if(extract_int_arg(current, &msec_arg) < 0)
+                if(extract_int_arg(current, (int*)&msec_arg) < 0)
                     return -1;
                 else {
                     //divide UINT32_MAX by 8 to avoid overflow
-                    if(msec_arg >= 0 && msec_arg <= UINT32_MAX)
+                    if(msec_arg >= 0 && msec_arg <= (UINT32_MAX >> 3))
                         msec_arg = msec_arg * 8;
                     else return -1;
                 }
