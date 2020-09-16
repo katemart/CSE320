@@ -176,6 +176,7 @@ int set_zero_padding(FILE *audio_out, FILE *fp, int file_bool, int start, int en
  */
 int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     // TO BE IMPLEMENTED
+    //debug("%u", length);
     //note: length = audio_samples
     int fr, fc;
     int prev_end = -1;
@@ -370,15 +371,16 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
     /*int16_t sample;
     audio_read_sample(audio_in, &sample);
     audio_write_sample(events_out, sample);*/
-    while(1) {
+    int i = 0;
+    while(!feof(audio_in)) {
+        i++;
+        debug("%d", i);
         int g_strengths = get_strengths(audio_in, block_size);
         if(g_strengths != 0)
             return EOF;
         int tone = check_tone();
         if(tone != 0)
             return EOF;
-        if(feof(audio_in))
-            break ;
     }
     return 0;
 }
