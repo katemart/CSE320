@@ -328,11 +328,11 @@ int check_tone(double *sum, int *str_row_index, int *str_col_index) {
     //debug("sum %lf, ratio %lf, str_row %lf, str_col %lf, %d r_i, %d c_i", *sum, ratio, str_row, str_col, *str_row_index, *str_col_index);
     //check if values are in range
     if(*sum < MINUS_20DB) {
-        //debug("sum fail\n");
+        //debug("sum fail");
         return -1;
     }
     if(ratio <= (1/FOUR_DB) || ratio >= FOUR_DB) {
-        //debug("ratio fail\n");
+        //debug("ratio fail");
         return -1;
     }
     //check strongest row/col against other rows/cols
@@ -357,7 +357,7 @@ int check_tone(double *sum, int *str_row_index, int *str_col_index) {
             str_col_ratio = str_col / *(goertzel_strengths + i);
             //debug("after str col ratio %lf\n", str_col_ratio);
             if(str_col_ratio < SIX_DB) {
-                //debug("str col ratio fail %lf", str_col_ratio);
+                debug("str col ratio fail %lf", str_col_ratio);
                 return -1;
             }
         }
@@ -395,8 +395,8 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
     //read and validate header from input stream
     AUDIO_HEADER header;
     int read_header = audio_read_header(audio_in, &header);
-        if(read_header == EOF)
-            return EOF;
+    if(read_header == EOF)
+        return EOF;
     //partition samples in block_size partitions until end of file
     char symbol = '\0', prev_symbol = '\0';
     int s_index = 0, e_index = 0, samples_read;
@@ -424,28 +424,24 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
                     }
                 }
                 //e_index += block_size;
-                //debug("if %d, %d", s_index, e_index);
-            }
-            else if(tone != 0 && sum == 0) {
-                //debug("else if s %c, ps%c", symbol, prev_symbol);
-                //e_index += block_size;
-                //if(symbol != prev_symbol && prev_symbol != '\0') {
-                if((e_index - s_index)/8000.0 >= MIN_DTMF_DURATION) {
-                    fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, symbol);
+                //debug("valid %d, %d\n", s_index, e_index);
+            } else if(tone != 0) {
+                //if(sum == 0 || sum != 0) {
+                    //debug("else if s %c, ps%c", symbol, prev_symbol);
+                    //e_index += block_size;
+                    if((e_index - s_index)/8000.0 >= MIN_DTMF_DURATION) {
+                        fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, symbol);
+                        s_index = e_index;
+                    }
+                    prev_symbol = '\0';
+                    symbol = '\0';
+                    e_index += block_size;
                     s_index = e_index;
-                }
-               //}
-                prev_symbol = '\0';
-                symbol = '\0';
-                e_index += block_size;
-                s_index = e_index;
-                debug("else if %d, %d", s_index, e_index);
-                //debug("continue");
+                    //debug("else if %d, %d", s_index, e_index);
+                //}
             } else return EOF;
-            //s_index = s_temp_index - block_size;
         }
     }
-    debug("%c", symbol);
     return 0;
 }
 
