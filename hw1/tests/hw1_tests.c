@@ -136,14 +136,14 @@ Test(basecode_tests_suite, goertzel_advanced_test) {
     audio_read_header(fp, &header);
     //goertzel init
     int N = 1000;
-    double k0 = (double) 697/8000 * N;
-    double k1 = (double) 770/8000 * N;
-    double k2 = (double) 852/8000 * N;
-    double k3 = (double) 941/8000 * N;
-    double k4 = (double) 1209/8000 * N;
-    double k5 = (double) 1336/8000 * N;
-    double k6 = (double) 1477/8000 * N;
-    double k7 = (double) 1633/8000 * N;
+    double k0 = (double) 697*N / 8000;
+    double k1 = (double) 770*N / 8000;
+    double k2 = (double) 852*N / 8000;
+    double k3 = (double) 941*N / 8000;
+    double k4 = (double) 1209*N / 8000;
+    double k5 = (double) 1336*N / 8000;
+    double k6 = (double) 1477*N / 8000;
+    double k7 = (double) 1633*N / 8000;
     GOERTZEL_STATE g0, g1, g2, g3, g4, g5, g6, g7;
     goertzel_init(&g0, N, k0);
     goertzel_init(&g1, N, k1);
