@@ -280,7 +280,7 @@ int get_strengths(FILE *fp, int N, int *samples_read) {
         if(read_sample != 0 && !feof(fp))
             return -1;
         else if(feof(fp))
-            read_sample = 0;
+            sample = 0;
         (*samples_read)++;
         x = (double) sample / INT16_MAX;
         for(int j = 0; j < NUM_DTMF_FREQS; j++) {
@@ -389,9 +389,9 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
         if(read_header == EOF)
             return EOF;
     //partition samples in block_size partitions until end of file
-    char symbol, prev_symbol;
+    char symbol = '\0', prev_symbol = '\0';
     int s_index = 0, e_index = 0, samples_read;
-    while(1) {
+    while(!feof(audio_in)) {
         double sum = 0;
         int str_row_index = 0;
         int str_col_index = 0;
@@ -403,16 +403,34 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
             int tone = check_tone(&sum, &str_row_index, &str_col_index);
             //debug("%d tone", tone);
             if(tone != 0 && sum != 0) {
-                e_index += block_size;
+                prev_symbol = symbol;
                 symbol = *(*(dtmf_symbol_names + str_row_index) + str_col_index);
+                //debug("if s %c, ps%c", symbol, prev_symbol);
+                e_index += block_size;
+                debug("%c, %c", symbol,prev_symbol);
+                if(symbol != prev_symbol && prev_symbol != '\0') {
+                    if((e_index - s_index)/8000.0 >= MIN_DTMF_DURATION) {
+                        fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, prev_symbol);
+                        s_index = e_index;
+                    }
+                }
+                //e_index += block_size;
+                debug("if %d, %d", s_index, e_index);
             }
             else if(tone != 0 && sum == 0) {
-                if(s_index != e_index) {
-                    if((e_index - s_index)/8000 >= MIN_DTMF_DURATION)
-                        fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, symbol);
+                //debug("else if s %c, ps%c", symbol, prev_symbol);
+                //e_index += block_size;
+                //if(symbol != prev_symbol && prev_symbol != '\0') {
+                if((e_index - s_index)/8000.0 >= MIN_DTMF_DURATION) {
+                    fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, symbol);
                     s_index = e_index;
-                    e_index += block_size;
                 }
+               //}
+                prev_symbol = '\0';
+                symbol = '\0';
+                e_index += block_size;
+                s_index = e_index;
+                debug("else if %d, %d", s_index, e_index);
                 //debug("continue");
             } else return EOF;
             //s_index = s_temp_index - block_size;
