@@ -265,24 +265,26 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
 }
 
 //helper function for determining frequency strengths
-int get_strengths(FILE *fp, int N) {
+int get_strengths(FILE *fp, int N, int *samples_read) {
     //goertzel init
     for(int i = 0; i < NUM_DTMF_FREQS; i++) {
-        double k = (double) *(dtmf_freqs + i)/AUDIO_FRAME_RATE * N;
+        double k = (double) *(dtmf_freqs + i)*N / AUDIO_FRAME_RATE;
         goertzel_init(goertzel_state + i, N, k);
     }
     //goertzel step
     double x;
     int16_t sample;
+    *samples_read = 0;
     for(int i = 0; i < N-1; i++) {
         int read_sample = audio_read_sample(fp, &sample);
-        if(read_sample != 0)
+        if(read_sample != 0 && !feof(fp))
             return -1;
-        else {
-            x = (double) sample/INT16_MAX;
-            for(int j = 0; j < NUM_DTMF_FREQS; j++) {
-                goertzel_step(goertzel_state + j, x);
-            }
+        else if(feof(fp))
+            read_sample = 0;
+        (*samples_read)++;
+        x = (double) sample / INT16_MAX;
+        for(int j = 0; j < NUM_DTMF_FREQS; j++) {
+            goertzel_step(goertzel_state + j, x);
         }
     }
     //goertzel strength
@@ -299,7 +301,7 @@ int get_strengths(FILE *fp, int N) {
 }
 
 //helper function for finding greatest strengths
-int check_tone() {
+int check_tone(double *sum, int *str_row_index, int *str_col_index) {
     double str_row = *(goertzel_strengths);
     double str_col = *(goertzel_strengths + 4);
     //determine strongest row/col freq component
@@ -307,29 +309,50 @@ int check_tone() {
     double row_sum, col_sum;
     for(int i = 0; i < NUM_DTMF_FREQS/2; i++) {
         row_sum += *(goertzel_strengths + i);
-        if(*(goertzel_strengths + i) > str_row)
+        if(*(goertzel_strengths + i) > str_row) {
             str_row = *(goertzel_strengths + i);
+            *str_row_index = i;
+        }
     }
-    double str_row_ratio = str_row / (row_sum - str_row);
     for(int i = NUM_DTMF_FREQS/2; i < NUM_DTMF_FREQS; i++) {
         col_sum += *(goertzel_strengths + i);
-        if(*(goertzel_strengths + i) > str_col)
+        if(*(goertzel_strengths + i) > str_col) {
             str_col = *(goertzel_strengths + i);
+            *str_col_index = i - 4;
+        }
     }
-    double str_col_ratio = str_col / (col_sum - str_col);
     //final values
-    double sum = str_row + str_col;
+    *sum = str_row + str_col;
     double ratio = str_row / str_col;
+    //debug("%lf", sum);
     //debug("%lf, %lf", str_row, str_col);
-    //debug("sum %lf, ratio %lf, str_row_ratio %lf, str_col_ratio %lf", sum, ratio, str_row_ratio, str_col_ratio);
+    //debug("sum %lf, ratio %lf, str_row %lf, str_col %lf, %d r_i, %d c_i", *sum, ratio, str_row, str_col, *str_row_index, *str_col_index);
     //check if values are in range
-    if(sum < MINUS_20DB)
+    if(*sum < MINUS_20DB) {
+        //debug("sum fail\n");
         return -1;
-    if(ratio <= (1/FOUR_DB) || ratio >= FOUR_DB)
+    }
+    if(ratio <= (1/FOUR_DB) || ratio >= FOUR_DB) {
+        //debug("ratio fail\n");
         return -1;
-    //NOT SURE:
-    if(str_row_ratio < SIX_DB || str_col_ratio < SIX_DB)
-        return -1;
+    }
+    //check strongest row/col against other rows/cols
+    double str_row_ratio;
+    for(int i = 0; i < NUM_DTMF_FREQS/2; i++) {
+        if(str_row != i) {
+            str_row_ratio = str_row / *(goertzel_strengths + i);
+            if(str_row_ratio < SIX_DB)
+                return -1;
+        }
+    }
+    double str_col_ratio;
+    for(int i = NUM_DTMF_FREQS/2; i < NUM_DTMF_FREQS; i++) {
+        if(str_col != i) {
+            str_col_ratio = str_col / *(goertzel_strengths + i);
+            if(str_col_ratio < SIX_DB)
+                return -1;
+        }
+    }
     return 0;
 }
 
@@ -365,28 +388,37 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
     int read_header = audio_read_header(audio_in, &header);
         if(read_header == EOF)
             return EOF;
-    int write_header = audio_write_header(events_out, &header);
-        if(write_header == EOF)
-            return EOF;
-    /*int16_t sample;
-    audio_read_sample(audio_in, &sample);
-    audio_write_sample(events_out, sample);*/
-    //int i = 0;
+    //partition samples in block_size partitions until end of file
+    char symbol, prev_symbol;
+    int s_index = 0, e_index = 0, samples_read;
     while(1) {
-        int g_strengths = get_strengths(audio_in, block_size);
-        if(g_strengths != 0 && feof(audio_in))
-            break;
-        else if(g_strengths != 0)
+        double sum = 0;
+        int str_row_index = 0;
+        int str_col_index = 0;
+        int g_strengths = get_strengths(audio_in, block_size, &samples_read);
+        //debug("%d strengths", g_strengths);
+        if(g_strengths != 0 && !feof(audio_in))
             return EOF;
         else {
-            //i++;
-            continue;
+            int tone = check_tone(&sum, &str_row_index, &str_col_index);
+            //debug("%d tone", tone);
+            if(tone != 0 && sum != 0) {
+                e_index += block_size;
+                symbol = *(*(dtmf_symbol_names + str_row_index) + str_col_index);
+            }
+            else if(tone != 0 && sum == 0) {
+                if(s_index != e_index) {
+                    if((e_index - s_index)/8000 >= MIN_DTMF_DURATION)
+                        fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, symbol);
+                    s_index = e_index;
+                    e_index += block_size;
+                }
+                //debug("continue");
+            } else return EOF;
+            //s_index = s_temp_index - block_size;
         }
-        int tone = check_tone();
-        if(tone != 0)
-            return EOF;
     }
-    //debug("%d", i);
+    debug("%c", symbol);
     return 0;
 }
 
