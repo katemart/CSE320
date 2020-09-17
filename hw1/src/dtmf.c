@@ -117,7 +117,7 @@ int check_file(FILE *fp) {
 }
 
 //function to combine noise file with sample
-int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
+int combine_noise_file(FILE *fp, FILE *audio_out, double sample) {
     //if header is successfully read (when check_file), get samples from file
     int16_t noise_sample;
     int read_sample = audio_read_sample(fp, &noise_sample);
@@ -127,10 +127,10 @@ int combine_noise_file(FILE *fp, FILE *audio_out, int16_t sample) {
     //if file sample is valid, combine with current sample
     //w = (10^dB/10) / (1 + 10^dB/10)
     double w = (pow(10,(noise_level/10.0)) / (1 + pow(10, noise_level/10.0)));
-    int16_t final_sample = (noise_sample * w) + (sample * (1-w));
-    debug("w: %lf, val: %lf \n", w, (noise_sample * w) + (sample * (1-w)));
+    double final_sample = (double)(noise_sample * w) + (sample * (1-w));
+    //debug("w: %lf, val: %lf \n", w, (noise_sample * w) + (sample * (1-w)));
     //int write_sample = audio_write_sample(audio_out, final_sample/2);
-    int write_sample = audio_write_sample(audio_out, final_sample);
+    int write_sample = audio_write_sample(audio_out, (int16_t)final_sample);
     if(write_sample != 0) {
         return -1;
     }
@@ -230,7 +230,8 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
             //do calculations for each index and write to file
             double fr_value = cos(2.0 * M_PI * fr * i / AUDIO_FRAME_RATE) * 0.5;
             double fc_value = cos(2.0 * M_PI * fc * i / AUDIO_FRAME_RATE) * 0.5;
-            int16_t dtmf_sample = (int16_t)((fr_value + fc_value) * INT16_MAX);
+            double dtmf_sample = (double)(fr_value + fc_value) * INT16_MAX;
+            //int16_t dtmf_sample = (int16_t)((fr_value + fc_value) * INT16_MAX);
             //check if noise file was given
             if(file_bool != 0) {
                 //if so combine with current dtmf_sample
@@ -240,7 +241,7 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
             } else {
                 //if no noise file is given, write dtmf_sample to stdout
                 //int write_sample = audio_write_sample(audio_out, dtmf_sample/2);
-                int write_sample = audio_write_sample(audio_out, dtmf_sample);
+                int write_sample = audio_write_sample(audio_out, (int16_t)dtmf_sample);
                 if(write_sample != 0) {
                     return EOF;
                 }
@@ -294,9 +295,9 @@ int get_strengths(FILE *fp, int N, int *samples_read) {
         double strength = goertzel_strength(goertzel_state + i, x);
         *(goertzel_strengths + i) = strength;
     }
-    for(int i = 0; i < NUM_DTMF_FREQS; i++) {
+    /*for(int i = 0; i < NUM_DTMF_FREQS; i++) {
         debug("%lf", *(goertzel_strengths + i));
-    }
+    }*/
     return 0;
 }
 
@@ -324,14 +325,14 @@ int check_tone(double *sum, int *str_row_index, int *str_col_index) {
     //final values
     *sum = str_row + str_col;
     double ratio = str_row / str_col;
-    debug("sum %lf, ratio %lf, str_row %lf, str_col %lf, %d r_i, %d c_i", *sum, ratio, str_row, str_col, *str_row_index, *str_col_index);
+    //debug("sum %lf, ratio %lf, str_row %lf, str_col %lf, %d r_i, %d c_i", *sum, ratio, str_row, str_col, *str_row_index, *str_col_index);
     //check if values are in range
     if(*sum < MINUS_20DB) {
-        debug("sum fail\n");
+        //debug("sum fail\n");
         return -1;
     }
     if(ratio <= (1/FOUR_DB) || ratio >= FOUR_DB) {
-        debug("ratio fail\n");
+        //debug("ratio fail\n");
         return -1;
     }
     //check strongest row/col against other rows/cols
@@ -343,7 +344,7 @@ int check_tone(double *sum, int *str_row_index, int *str_col_index) {
             str_row_ratio = str_row / *(goertzel_strengths + i);
             //debug("after str row ratio %lf\n", str_row_ratio);
             if(str_row_ratio < SIX_DB) {
-                debug("str row ratio fail %lf", str_row_ratio);
+                //debug("str row ratio fail %lf", str_row_ratio);
                 return -1;
             }
         }
@@ -356,7 +357,7 @@ int check_tone(double *sum, int *str_row_index, int *str_col_index) {
             str_col_ratio = str_col / *(goertzel_strengths + i);
             //debug("after str col ratio %lf\n", str_col_ratio);
             if(str_col_ratio < SIX_DB) {
-                debug("str col ratio fail %lf", str_col_ratio);
+                //debug("str col ratio fail %lf", str_col_ratio);
                 return -1;
             }
         }
@@ -409,7 +410,7 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
             return EOF;
         else {
             int tone = check_tone(&sum, &str_row_index, &str_col_index);
-            debug("%d tone", tone);
+            //debug("%d tone", tone);
             if(tone == 0 && sum != 0) {
                 prev_symbol = symbol;
                 symbol = *(*(dtmf_symbol_names + str_row_index) + str_col_index);
