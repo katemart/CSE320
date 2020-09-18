@@ -47,7 +47,6 @@ int str_to_num(char *str_number, int *number) {
         else return -1;
     }
   *number = n * negative;
-  //debug("%d | %u", *number, *number);
   return 0;
 }
 
@@ -134,7 +133,6 @@ int combine_noise_file(FILE *fp, FILE *audio_out, double sample) {
     double w = (pow(10,(noise_level/10.0)) / (1 + pow(10, noise_level/10.0)));
     double final_sample = (double)(noise_sample * w) + (sample * (1-w));
     //debug("w: %lf, val: %lf \n", w, (noise_sample * w) + (sample * (1-w)));
-    //int write_sample = audio_write_sample(audio_out, final_sample/2);
     int write_sample = audio_write_sample(audio_out, (int16_t)final_sample);
     if(write_sample != 0) {
         //debug("combine noise file write sample failed");
@@ -155,7 +153,6 @@ int set_zero_padding(FILE *audio_out, FILE *fp, int file_bool, int start, int en
             }
         } else {
             //else just pad with zeroes only
-            //int write_sample = audio_write_sample(audio_out, sample/2);
             int write_sample = audio_write_sample(audio_out, sample);
             if(write_sample != 0) {
                 //debug("zero padding failed");
@@ -185,7 +182,6 @@ int set_zero_padding(FILE *audio_out, FILE *fp, int file_bool, int start, int en
  */
 int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     // TO BE IMPLEMENTED
-    //debug("%u", length);
     //note: length = audio_samples
     int fr, fc;
     int prev_end = -1;
@@ -201,7 +197,7 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         }
     }
     //generate audio header
-    uint32_t data_size = length * 2;
+    uint32_t data_size = length * AUDIO_BYTES_PER_SAMPLE;
     AUDIO_HEADER header = {AUDIO_MAGIC, AUDIO_DATA_OFFSET, data_size,
         PCM16_ENCODING, AUDIO_FRAME_RATE, AUDIO_CHANNELS};
     int write_header = audio_write_header(audio_out, &header);
@@ -258,7 +254,6 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
                     return EOF;
             } else {
                 //if no noise file is given, write dtmf_sample to stdout
-                //int write_sample = audio_write_sample(audio_out, dtmf_sample/2);
                 int write_sample = audio_write_sample(audio_out, (int16_t)dtmf_sample);
                 if(write_sample != 0) {
                     //debug("generate write sample :264 failed");
