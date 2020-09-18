@@ -345,7 +345,7 @@ int check_tone(double *sum, int *str_row_index, int *str_col_index) {
         //debug("sum fail");
         return -1;
     }
-    if(ratio <= (1/FOUR_DB) || ratio >= FOUR_DB) {
+    if(ratio < (1/FOUR_DB) || ratio > FOUR_DB) {
         //debug("ratio fail");
         return -1;
     }
