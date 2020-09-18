@@ -19,29 +19,31 @@
 int main(int argc, char **argv)
 {
     if(validargs(argc, argv)) {
-      debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
+      //debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
       USAGE(*argv, EXIT_FAILURE);
     }
     if(global_options & 1) {
-      debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
+      //debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
       USAGE(*argv, EXIT_SUCCESS);
     }
     // TO BE IMPLEMENTED
     else if(global_options & GENERATE_OPTION) {
       int generate = dtmf_generate(stdin, stdout, audio_samples);
-      debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
+      //debug("%d", generate);
+      //debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
       if(generate == 0)
         return EXIT_SUCCESS;
       else return EXIT_FAILURE;
     }
     else if(global_options & DETECT_OPTION) {
-      debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
       int detect = dtmf_detect(stdin, stdout);
+      //debug("%d", detect);
+      //debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
       if(detect == 0)
         return EXIT_SUCCESS;
       else return EXIT_FAILURE;
     }
-    debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
+    //debug("g %d, t %d, file %s, l %d, b %d", global_options, audio_samples, noise_file, noise_level, block_size);
     return EXIT_FAILURE;
 }
 
