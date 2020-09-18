@@ -73,6 +73,7 @@ int find_symbol(char symbol, int *fr, int *fc) {
             }
         }
     }
+    //debug("finding symbol...");
     return -1;
 }
 
@@ -106,13 +107,17 @@ void get_event_fields(int *s_index, int *e_index, char *symbol) {
 //function to check if a noise file has been given
 int check_file(FILE *fp) {
     //check if file can be opened
-    if(fp == NULL)
+    if(fp == NULL) {
+        //debug("check file failed");
         return -1;
+    }
     //if so, validate header to set ptr to sample data
     AUDIO_HEADER file_header;
     int read_header = audio_read_header(fp, &file_header);
-    if(read_header == EOF)
+    if(read_header == EOF) {
+        //debug("check file read header failed");
         return -1;
+    }
     return 1;
 }
 
@@ -132,6 +137,7 @@ int combine_noise_file(FILE *fp, FILE *audio_out, double sample) {
     //int write_sample = audio_write_sample(audio_out, final_sample/2);
     int write_sample = audio_write_sample(audio_out, (int16_t)final_sample);
     if(write_sample != 0) {
+        //debug("combine noise file write sample failed");
         return -1;
     }
     return 0;
@@ -143,13 +149,16 @@ int set_zero_padding(FILE *audio_out, FILE *fp, int file_bool, int start, int en
         if(file_bool != 0) {
             //if so combine with zero sample
             int combine = combine_noise_file(fp, audio_out, sample);
-            if(combine != 0)
+            if(combine != 0) {
+                //debug("combine noise file zero padding write sample failed");
                 return -1;
+            }
         } else {
             //else just pad with zeroes only
             //int write_sample = audio_write_sample(audio_out, sample/2);
             int write_sample = audio_write_sample(audio_out, sample);
             if(write_sample != 0) {
+                //debug("zero padding failed");
                 return -1;
             }
         }
@@ -186,8 +195,10 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
     int file_bool = 0;
     if(noise_file != NULL) {
         file_bool = check_file(fp);
-        if(file_bool != 1)
+        if(file_bool != 1) {
+            //debug("file bool failed");
             return EOF;
+        }
     }
     //generate audio header
     uint32_t data_size = length * 2;
@@ -195,6 +206,7 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         PCM16_ENCODING, AUDIO_FRAME_RATE, AUDIO_CHANNELS};
     int write_header = audio_write_header(audio_out, &header);
     if(write_header != 0) {
+        //debug("generate write header failed");
         return EOF;
     }
     //generate samples by reading one line at a time
@@ -205,19 +217,25 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
         int s_index, e_index;
         get_event_fields(&s_index, &e_index, &symbol);
         //make sure indices are incrementing and events do not overlap
-        if(s_index > e_index || s_index < prev_end || e_index > length)
+        if(s_index > e_index || s_index < prev_end || e_index > length) {
+            //debug("index check failed");
             return EOF;
+        }
         //if first start index is not zero, set values before it to zero
         if(prev_end == -1 && s_index != 0) {
             int padding = set_zero_padding(audio_out, fp, file_bool, 0, s_index);
-            if(padding != 0)
+            if(padding != 0) {
+                //debug("generate first padding failed");
                 return EOF;
+            }
         }
         // set in-between DTMF event gaps to zero
         if(prev_end != -1) {
             int padding = set_zero_padding(audio_out, fp, file_bool, prev_end, s_index);
-            if(padding != 0)
+            if(padding != 0) {
+                //debug("generate gap padding failed");
                 return EOF;
+            }
         }
         //set current end index to be previous end index
         prev_end = e_index;
@@ -243,6 +261,7 @@ int dtmf_generate(FILE *events_in, FILE *audio_out, uint32_t length) {
                 //int write_sample = audio_write_sample(audio_out, dtmf_sample/2);
                 int write_sample = audio_write_sample(audio_out, (int16_t)dtmf_sample);
                 if(write_sample != 0) {
+                    //debug("generate write sample :264 failed");
                     return EOF;
                 }
             }
@@ -357,7 +376,7 @@ int check_tone(double *sum, int *str_row_index, int *str_col_index) {
             str_col_ratio = str_col / *(goertzel_strengths + i);
             //debug("after str col ratio %lf\n", str_col_ratio);
             if(str_col_ratio < SIX_DB) {
-                debug("str col ratio fail %lf", str_col_ratio);
+                //debug("str col ratio fail %lf", str_col_ratio);
                 return -1;
             }
         }
@@ -415,21 +434,23 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
                 prev_symbol = symbol;
                 symbol = *(*(dtmf_symbol_names + str_row_index) + str_col_index);
                 //debug("if s %c, ps%c", symbol, prev_symbol);
-                e_index += block_size;
+                //e_index += block_size;
                 //debug("%c, %c", symbol,prev_symbol);
                 if(symbol != prev_symbol && prev_symbol != '\0') {
                     if((e_index - s_index)/8000.0 >= MIN_DTMF_DURATION) {
+                        //debug("valid duration valid tone %d, %d", s_index, e_index);
                         fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, prev_symbol);
                         s_index = e_index;
                     }
                 }
-                //e_index += block_size;
+                e_index += block_size;
                 //debug("valid %d, %d\n", s_index, e_index);
             } else if(tone != 0) {
                 //if(sum == 0 || sum != 0) {
                     //debug("else if s %c, ps%c", symbol, prev_symbol);
                     //e_index += block_size;
                     if((e_index - s_index)/8000.0 >= MIN_DTMF_DURATION) {
+                        //debug("valid duration invalid tone");
                         fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, symbol);
                         s_index = e_index;
                     }
