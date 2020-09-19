@@ -289,13 +289,14 @@ int get_strengths(FILE *fp, int N, int *samples_read) {
     //goertzel step
     double x;
     int16_t sample;
-    *samples_read = 0;
     for(int i = 0; i < N-1; i++) {
         int read_sample = audio_read_sample(fp, &sample);
         if(read_sample != 0 && !feof(fp))
             return -1;
-        else if(feof(fp))
+        else if(feof(fp)) {
+            (*samples_read)--;
             sample = 0;
+        }
         (*samples_read)++;
         x = (double) sample / INT16_MAX;
         for(int j = 0; j < NUM_DTMF_FREQS; j++) {
@@ -303,6 +304,7 @@ int get_strengths(FILE *fp, int N, int *samples_read) {
         }
     }
     //goertzel strength
+    (*samples_read)++;
     audio_read_sample(fp, &sample);
     x = (double) sample / INT16_MAX;
     for(int i = 0; i < NUM_DTMF_FREQS; i++) {
@@ -413,7 +415,7 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
         return EOF;
     //partition samples in block_size partitions until end of file
     char symbol = '\0', prev_symbol = '\0';
-    int s_index = 0, e_index = 0, samples_read;
+    int s_index = 0, e_index = 0, samples_read = 0;
     while(!feof(audio_in)) {
         double sum = 0;
         int str_row_index = 0;
@@ -456,6 +458,17 @@ int dtmf_detect(FILE *audio_in, FILE *events_out) {
                     //debug("else if %d, %d", s_index, e_index);
                 //}
             } else return EOF;
+        }
+    }
+    if(feof(audio_in)) {
+        samples_read--;
+        //debug("%d", samples_read);
+        if((e_index - s_index)/8000.0 >= MIN_DTMF_DURATION) {
+            if(e_index > samples_read) {
+                e_index = samples_read;
+            }
+            fprintf(events_out, "%d\t%d\t%c\n", s_index, e_index, prev_symbol);
+            s_index = e_index;
         }
     }
     return 0;
