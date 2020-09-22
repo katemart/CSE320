@@ -8,7 +8,7 @@
  * UNIFORUM conference in Dallas.  I obtained it by electronic mail
  * directly from AT&T.  The people there assure me that it is indeed
  * in the public domain.
- * 
+ *
  * There is no manual page.  That is because the one they gave out at
  * UNIFORUM was slightly different from the current System V Release 2
  * manual page.  The difference apparently involved a note about the
@@ -22,11 +22,12 @@
  * However, I am not about to post a copy of anything licensed by AT&T.
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /*LINTLIBRARY*/
-#define NULL	0
-#define EOF	(-1)
-#define ERR(s, c)	if(opterr){\
+#define ERR(s, c) if(opterr){\
 	extern int write();\
 	char errbuf[2];\
 	errbuf[0] = c; errbuf[1] = '\n';\
@@ -39,12 +40,12 @@ extern char *strchr();
 int	opterr = 1;
 int	optind = 1;
 int	optopt;
-char	*optarg;
+char *optarg;
 
 int
 att_getopt(argc, argv, opts)
 int	argc;
-char	**argv, *opts;
+char **argv, *opts;
 {
 	static int sp = 1;
 	register int c;
