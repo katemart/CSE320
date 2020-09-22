@@ -37,7 +37,7 @@ int setup_test(char *name) {
  * and standard and error output redirected to separate output files.
  */
 int run_using_system(char *name, char *pre_cmd, char *valgrind_cmd) {
-    char cmd[500];
+    char cmd[1024];
     setup_test(name);
     sprintf(cmd, "%s%s bin/finddup %s > %s.out 2> %s.err",
 	    pre_cmd, valgrind_cmd, program_options, test_log_outfile, test_log_outfile);
