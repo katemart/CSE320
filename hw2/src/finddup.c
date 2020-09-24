@@ -45,7 +45,7 @@ int fullcmp();
 #define debug(X)
 #define OPTSTR	"lh"
 #endif
-#define SORT qsort((char *)filelist, n_files, sizeof(filedesc *), comp1);
+#define SORT qsort((char *)filelist, n_files, sizeof(filedesc), comp1);
 #define GetFlag(x,f) ((filelist[x].flags & (f)) != 0)
 #define SetFlag(x,f) (filelist[x].flags |= (f))
 
@@ -210,6 +210,9 @@ char *argv[];
 	/* sort the list by size, device, and inode */
 	fprintf(stderr, "sort...");
 	SORT;
+	/*for(int i = 0; i < n_files; i++) {
+		printf("\n %i, %lu, %lu, %lu\n", i, filelist[i].length, filelist[i].device, filelist[i].inode);
+	}*/
 
 	/* make the first scan for equal lengths */
 	fprintf(stderr, "scan1...");
@@ -245,11 +248,20 @@ char *p1, *p2;
 {
 	register filedesc *p1a = (filedesc *)p1, *p2a = (filedesc *)p2;
 	register int retval;
-
-	return (retval = p1a->length - p2a->length) ||
+	retval = p1a->length - p2a->length;
+	if(retval != 0)
+		return retval;
+	retval = p1a->device - p2a->device;
+	if(retval != 0)
+		return retval;
+	retval = p1a->inode - p2a->inode;
+	if(retval != 0)
+		return retval;
+	return 0;
+	/*return (retval = p1a->length - p2a->length) ||
 	(retval = p1a->crc32 - p2a->crc32) ||
 	(retval = p1a->device - p2a->device) ||
-	(retval = p1a->inode - p2a->inode);
+	(retval = p1a->inode - p2a->inode);*/
 }
 
 /* scan1 - get a CRC32 for files of equal length */
@@ -285,7 +297,6 @@ scan2() {
 	int lnkmatch;				/* flag for matching links */
 	register filedesc *p1, *p2;
 	filedesc wkdesc;
-
 	/* mark links and output before dup check */
 	for (ix = 0; ix < n_files; ix = ix2) {
 		p1 = filelist + ix;
@@ -352,15 +363,18 @@ void
 scan3()
 {
 	register filedesc *p1, *p2;
-	int ix, ix2, inmatch, need_hdr = 1;
+	int ix, ix2, inmatch = 0, need_hdr = 1;
 	char *headfn;				/* pointer to the filename for sups */
 
 	/* now repeat for duplicates, links or not */
 	for (ix = 0; ix < n_files; ++ix) {
+		//printf("%d", GetFlag(ix, FL_DUP));
 		if (GetFlag(ix, FL_DUP)) {
 			/* put out a header if you haven't */
-			if (!inmatch)
-				strcpy(headfn, getfn(ix-1));
+			if (!inmatch) {
+				headfn = getfn(ix-1);
+				//strcpy(headfn, getfn(ix-1));
+			}
 			inmatch = 1;
 			if (linkflag || !GetFlag(ix, FL_LNK)) {
 				/* header on the very first */
@@ -370,6 +384,7 @@ scan3()
 					if (linkflag) printf(" (includes hard links)");
 					putchar('\n');
 				}
+				//printf("headfn %s, %s\n", headfn, getfn(ix-1));
 
 				/* 1st filename if any dups */
 				if (headfn != NULL) {
