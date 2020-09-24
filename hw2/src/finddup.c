@@ -210,9 +210,6 @@ char *argv[];
 	/* sort the list by size, device, and inode */
 	fprintf(stderr, "sort...");
 	SORT;
-	/*for(int i = 0; i < n_files; i++) {
-		printf("\n %i, %lu, %lu, %lu\n", i, filelist[i].length, filelist[i].device, filelist[i].inode);
-	}*/
 
 	/* make the first scan for equal lengths */
 	fprintf(stderr, "scan1...");
@@ -221,6 +218,9 @@ char *argv[];
 	/* make the second scan for dup CRC also */
 	fprintf(stderr, "scan2...");
 	scan2();
+	/* for(int i = 0; i < n_files; i++) {
+		printf("\nSCAN2 %i, %lu, %lu, %lu, %i\n", i, filelist[i].length, filelist[i].device, filelist[i].inode, filelist[i].flags);
+	} */
 
 	fprintf(stderr, "done\n");
 
@@ -258,17 +258,12 @@ char *p1, *p2;
 	if(retval != 0)
 		return retval;
 	return 0;
-	/*return (retval = p1a->length - p2a->length) ||
-	(retval = p1a->crc32 - p2a->crc32) ||
-	(retval = p1a->device - p2a->device) ||
-	(retval = p1a->inode - p2a->inode);*/
 }
 
 /* scan1 - get a CRC32 for files of equal length */
 
 void
 scan1() {
-	FILE *fp;
 	int ix, needsort = 0;
 	for (ix = 1; ix <= n_files; ++ix) {
 		if (filelist[ix-1].length == filelist[ix].length) {
@@ -338,7 +333,7 @@ scan2() {
 				SetFlag(ix2, FL_DUP);
 				/* move if needed */
 				if (lastix != ix2) {
-					int n1, n2;
+					int n1;
 
 					debug(("\n  swap %d and %d", lastix, ix2));
 					wkdesc = filelist[ix2];
@@ -362,20 +357,23 @@ scan2() {
 void
 scan3()
 {
-	register filedesc *p1, *p2;
-	int ix, ix2, inmatch = 0, need_hdr = 1;
-	char *headfn;				/* pointer to the filename for sups */
+	int ix, inmatch, need_hdr = 1;
+	char *headfn = NULL;				/* pointer to the filename for sups */
 
 	/* now repeat for duplicates, links or not */
 	for (ix = 0; ix < n_files; ++ix) {
-		//printf("%d", GetFlag(ix, FL_DUP));
-		if (GetFlag(ix, FL_DUP)) {
+		/* check for "original" files */
+		if(!GetFlag(ix, FL_DUP)) {
 			/* put out a header if you haven't */
+			inmatch = 0;
+			/* printf("\nINDEX%i\n", ix); */
 			if (!inmatch) {
-				headfn = getfn(ix-1);
-				//strcpy(headfn, getfn(ix-1));
+				inmatch = 1;
+				headfn = getfn(ix);
 			}
-			inmatch = 1;
+		}
+		/* check for rest of duplicate files */
+		else if (GetFlag(ix, FL_DUP)) {
 			if (linkflag || !GetFlag(ix, FL_LNK)) {
 				/* header on the very first */
 				if (need_hdr) {
@@ -384,7 +382,6 @@ scan3()
 					if (linkflag) printf(" (includes hard links)");
 					putchar('\n');
 				}
-				//printf("headfn %s, %s\n", headfn, getfn(ix-1));
 
 				/* 1st filename if any dups */
 				if (headfn != NULL) {
