@@ -32,7 +32,7 @@ int fullcmp();
 #define MAXFN	120             /* max filename length */
 
 /* constants */
-#define EOS	((char) '\0')		/* end of string */
+#define EOS		((char) '\0')	/* end of string */
 #define FL_CRC	0x0001			/* flag if CRC valid */
 #define FL_DUP	0x0002			/* files are duplicates */
 #define FL_LNK	0x0004			/* file is a link */
@@ -196,6 +196,7 @@ char *argv[];
 		}
 
 		curptr = filelist + n_files++;
+		curptr->crc32 = 0;
 		curptr->nameloc = loc;
 		curptr->length = statbuf.st_size;
 		curptr->device = statbuf.st_dev;
@@ -249,6 +250,7 @@ char *p1, *p2;
 {
 	register filedesc *p1a = (filedesc *)p1, *p2a = (filedesc *)p2;
 	register int retval;
+
 	retval = p1a->length - p2a->length;
 	if(retval != 0)
 		return retval;
@@ -261,6 +263,7 @@ char *p1, *p2;
 	retval = p1a->inode - p2a->inode;
 	if(retval != 0)
 		return retval;
+
 	return 0;
 }
 
@@ -269,7 +272,8 @@ char *p1, *p2;
 void
 scan1() {
 	int ix, needsort = 0;
-	for (ix = 1; ix <= n_files; ++ix) {
+
+	for (ix = 1; ix < n_files; ++ix) {
 		if (filelist[ix-1].length == filelist[ix].length) {
 			/* get a CRC for each */
 			if (! GetFlag(ix-1, FL_CRC)) {
@@ -283,6 +287,7 @@ scan1() {
 			needsort = 1;
 		}
 	}
+
 	if (needsort) SORT;
 }
 
@@ -453,7 +458,7 @@ int v1, v2;
 {
 	FILE *fp1, *fp2;
 	char filename[MAXFN];
-	register char ch;
+	register int ch;
 
 	/* open the files */
 	strcpy(filename, getfn(v1));
@@ -463,7 +468,7 @@ int v1, v2;
 		perror("can't access for read");
 		exit(1);
 	}
-	debug(("\nFull compare %s\nand", filename));
+	debug(("\nFull compare %s\n         and", filename));
 
 	strcpy(filename, getfn(v2));
 	fp2 = fopen(filename, "r");
@@ -474,14 +479,16 @@ int v1, v2;
 	}
 	debug(("%s", filename));
 
+	int retval;
 	/* now do the compare */
 	while ((ch = getc(fp1)) != EOF) {
-		if (ch - getc(fp2)) break;
+		retval = ch - getc(fp2);
+		if (retval != 0) return (retval);
 	}
 
 	/* close files and return value */
 	fclose(fp1);
 	fclose(fp2);
-	debug(("\n return %d", !(ch == EOF)));
+	debug(("\n      return %d", !(ch == EOF)));
 	return (!(ch == EOF));
 }
