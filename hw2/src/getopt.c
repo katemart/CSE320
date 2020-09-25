@@ -27,7 +27,7 @@
 #include <string.h>
 
 /*LINTLIBRARY*/
-#define ERR(s, c) if(opterr){\
+#define ERR(s, c)	if(opterr){\
 	extern int write();\
 	char errbuf[2];\
 	errbuf[0] = c; errbuf[1] = '\n';\
@@ -40,12 +40,12 @@ extern char *strchr();
 int	opterr = 1;
 int	optind = 1;
 int	optopt;
-char *optarg;
+char	*optarg;
 
 int
 att_getopt(argc, argv, opts)
 int	argc;
-char **argv, *opts;
+char	**argv, *opts;
 {
 	static int sp = 1;
 	register int c;
