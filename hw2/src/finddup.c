@@ -387,6 +387,8 @@ scan3()
 			/* put out a header if you haven't */
 			inmatch = 0;
 			if (!inmatch) {
+				if(headfn)
+					free(headfn);
 				inmatch = 1;
 				headfn = getfn(ix);
 			}
@@ -405,8 +407,10 @@ scan3()
 				/* 1st filename if any dups */
 				if (headfn != NULL) {
 					printf("\nFILE: %s\n", headfn);
+					free(headfn);
 					headfn = NULL;
 				}
+
 				dupfn = getfn(ix);
 				printf("DUP:  %s\n", dupfn);
 				if (dupfn)
@@ -414,6 +418,8 @@ scan3()
 			}
 		}
 	}
+	if(headfn)
+		free(headfn);
 }
 
 /* get_crc - get a CRC32 for a file */
