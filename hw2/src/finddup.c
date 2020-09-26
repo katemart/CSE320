@@ -29,7 +29,6 @@ int att_getopt();
 int fullcmp();
 
 /* parameters */
-#define MAXFN	120             /* max filename length */
 
 /* constants */
 #define EOS		((char) '\0')	/* end of string */
@@ -103,7 +102,7 @@ int finddup_main(argc, argv)
 int argc;
 char *argv[];
 {
-	char curfile[MAXFN];
+	char *curfile = NULL;
 	struct stat statbuf;
 	int ch;
 	int firsterr = 0;			/* flag on 1st error for format */
@@ -111,6 +110,8 @@ char *argv[];
 	off_t loc;            		/* location of name in the file */
 	int zl_hdr = 1;				/* need header for zero-length files list */
 	filedesc *curptr;			/* pointer to current storage loc */
+	size_t len = 0;
+	ssize_t linelen = 0;
 
 	/* parse options, if any */
 	opterr = 0;
@@ -161,7 +162,7 @@ char *argv[];
 	fprintf(stderr, "build list...");
 
 	/* this is the build loop */
-	while (loc = ftell(namefd), fgets(curfile, MAXFN, namefd) != NULL) {
+	while (loc = ftell(namefd), (linelen = getline(&curfile, &len, namefd)) != -1) {
 		/* check for room in the buffer */
 		if (n_files == max_files) {
 			/* allocate more space */
@@ -174,7 +175,7 @@ char *argv[];
 			}
 			debug(("Got more memory!\n"));
 		}
-		curfile[strlen(curfile)-1] = EOS;
+		curfile[linelen-1] = EOS;
 
 		/* add the data for this one */
 		if (stat(curfile, &statbuf)) {
@@ -207,6 +208,8 @@ char *argv[];
 			(long) statbuf.st_size, statbuf.st_ino
 		));
 	}
+	if(curfile)
+		free(curfile);
 
 	/* sort the list by size, device, and inode */
 	fprintf(stderr, "sort...");
@@ -299,6 +302,7 @@ scan2() {
 	int inmatch;				/* 1st filename has been printed */
 	int need_hdr = 1;			/* Need a hdr for the hard link list */
 	int lnkmatch;				/* flag for matching links */
+	char *filename = NULL;
 	register filedesc *p1, *p2;
 	filedesc wkdesc;
 	/* mark links and output before dup check */
@@ -319,9 +323,15 @@ scan2() {
 
 				if (!inmatch) {
 					inmatch = 1;
-					printf("\nFILE: %s\n", getfn(ix));
+					filename = getfn(ix);
+					printf("\nFILE: %s\n", filename);
+					if (filename)
+        				free(filename);
 				}
-				printf("LINK: %s\n", getfn(ix2));
+				filename = getfn(ix2);
+				printf("LINK: %s\n", filename);
+				if (filename)
+        			free(filename);
 			}
 		}
 	}
@@ -368,6 +378,7 @@ scan3()
 {
 	int ix, inmatch, need_hdr = 1;
 	char *headfn = NULL;				/* pointer to the filename for sups */
+	char *dupfn = NULL;
 
 	/* now repeat for duplicates, links or not */
 	for (ix = 0; ix < n_files; ++ix) {
@@ -396,7 +407,10 @@ scan3()
 					printf("\nFILE: %s\n", headfn);
 					headfn = NULL;
 				}
-				printf("DUP:  %s\n", getfn(ix));
+				dupfn = getfn(ix);
+				printf("DUP:  %s\n", dupfn);
+				if (dupfn)
+        			free(dupfn);
 			}
 		}
 	}
@@ -412,18 +426,19 @@ int ix;
 	register unsigned long val1 = 0x90909090, val2 = 0xeaeaeaea;
 	register int carry;
 	char ch;
-	char fname[MAXFN];
+	char *fname = NULL;
+	size_t len = 0;
+	ssize_t linelen = 0;
 
 	/* open the file */
 	fseek(namefd, filelist[ix].nameloc, 0);
-	fgets(fname, MAXFN, namefd);
-	fname[strlen(fname)-1] = EOS;
+	linelen = getline(&fname, &len, namefd);
+	fname[linelen-1] = EOS;
 	debug(("\nCRC start - %s ", fname));
 	if ((fp = fopen(fname, "r")) == NULL) {
 		fprintf(stderr, "Can't read file %s\n", fname);
 		exit(1);
 	}
-
 	/* build the CRC values */
 	while ((ch = fgetc(fp)) != EOF) {
 		carry = (val1 & 0x8000000) != 0;
@@ -431,6 +446,8 @@ int ix;
 		val2 += ch << (ch & 003);
 	}
 	debug(("v1: %08lx v2: %08lx ", val1, val2));
+	if (fname)
+        free(fname);
 
 	return ((val1 & 0xffff) << 12) ^ (val2 && 0xffffff);
 }
@@ -441,12 +458,13 @@ char *
 getfn(ix)
 off_t ix;
 {
-	static char fnbuf[MAXFN];
+	char *fnbuf = NULL;
+	size_t len = 0;
+	ssize_t linelen = 0;
 
 	fseek(namefd, filelist[ix].nameloc, 0);
-	fgets(fnbuf, MAXFN, namefd);
-	fnbuf[strlen(fnbuf)-1] = EOS;
-
+	linelen = getline(&fnbuf, &len, namefd);
+	fnbuf[linelen-1] = EOS;
 	return fnbuf;
 }
 
@@ -457,11 +475,11 @@ fullcmp(v1, v2)
 int v1, v2;
 {
 	FILE *fp1, *fp2;
-	char filename[MAXFN];
+	char *filename = NULL;
 	register int ch;
 
 	/* open the files */
-	strcpy(filename, getfn(v1));
+	filename = getfn(v1);
 	fp1 = fopen(filename, "r");
 	if (fp1 == NULL) {
 		fprintf(stderr, "%s: ", filename);
@@ -469,8 +487,10 @@ int v1, v2;
 		exit(1);
 	}
 	debug(("\nFull compare %s\n         and", filename));
+	if (filename)
+        free(filename);
 
-	strcpy(filename, getfn(v2));
+	filename = getfn(v2);
 	fp2 = fopen(filename, "r");
 	if (fp2 == NULL) {
 		fprintf(stderr, "%s: ", filename);
@@ -478,6 +498,8 @@ int v1, v2;
 		exit(1);
 	}
 	debug(("%s", filename));
+	if (filename)
+        free(filename);
 
 	int retval;
 	/* now do the compare */
