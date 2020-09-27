@@ -126,6 +126,10 @@ char *argv[];
 			break;
 #endif /* ?DEBUG */
 		case 'h': /* help */
+			for (ch = 0; ch < HelpLen; ++ch) {
+				printf("%s\n", HelpMsg[ch]);
+			}
+			exit(0);
 		case '?':
 			for (ch = 0; ch < HelpLen; ++ch) {
 				printf("%s\n", HelpMsg[ch]);
@@ -185,6 +189,10 @@ char *argv[];
 			perror("ignored");
 			continue;
 		}
+
+		/* check for regular file */
+		if(!S_ISREG(statbuf.st_mode))
+			continue;
 
 		/* check for zero length files */
 		if ( statbuf.st_size == 0) {
@@ -410,7 +418,6 @@ scan3()
 					free(headfn);
 					headfn = NULL;
 				}
-
 				dupfn = getfn(ix);
 				printf("DUP:  %s\n", dupfn);
 				if (dupfn)
