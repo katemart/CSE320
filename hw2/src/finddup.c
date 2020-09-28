@@ -222,10 +222,6 @@ char *argv[];
 	/* sort the list by size, device, and inode */
 	fprintf(stderr, "sort...");
 	SORT;
-	/*for(int i = 0; i < n_files; i++) {
-		printf("\nSORT %i, %lu, %lu, %lu, %i, %lu\n", i, filelist[i].length, filelist[i].device, filelist[i].inode,
-			filelist[i].flags, filelist[i].crc32);
-	}*/
 
 	/* make the first scan for equal lengths */
 	fprintf(stderr, "scan1...");
@@ -262,21 +258,14 @@ char *p1, *p2;
 	register filedesc *p1a = (filedesc *)p1, *p2a = (filedesc *)p2;
 	register int retval;
 
-	retval = p1a->length - p2a->length;
-	if(retval != 0)
-		return retval;
-	retval = p1a->crc32 - p2a->crc32;
-	if(retval != 0)
-		return retval;
-	retval = p1a->device - p2a->device;
-	if(retval != 0)
-		return retval;
-	retval = p1a->inode - p2a->inode;
-	if(retval != 0)
-		return retval;
+	(void)((retval = p1a->length - p2a->length) ||
+	(retval = p1a->crc32 - p2a->crc32) ||
+	(retval = p1a->device - p2a->device) ||
+	(retval = p1a->inode - p2a->inode));
 
-	return 0;
+	return retval;
 }
+
 
 /* scan1 - get a CRC32 for files of equal length */
 
