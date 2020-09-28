@@ -24,9 +24,11 @@
 #include <malloc.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 int att_getopt();
 int fullcmp();
+uint32_t rc_crc32();
 
 /* parameters */
 
@@ -95,7 +97,7 @@ int comp1();					/* compare two filedesc's */
 void scan1();					/* make the CRC scan */
 void scan2();					/* do full compare if needed */
 void scan3();					/* print the results */
-unsigned long get_crc();		/* get crc32 on a file */
+uint32_t get_crc();				/* get crc32 on a file */
 char *getfn();					/* get a filename by index */
 
 int finddup_main(argc, argv)
@@ -420,17 +422,15 @@ scan3()
 
 /* get_crc - get a CRC32 for a file */
 
-unsigned long
+uint32_t
 get_crc(ix)
 int ix;
 {
 	FILE *fp;
-	register unsigned long val1 = 0x90909090, val2 = 0xeaeaeaea;
-	register int carry;
-	char ch;
 	char *fname = NULL;
-	size_t len = 0;
 	ssize_t linelen = 0;
+	size_t len = 0;
+	uint32_t crc = 0;
 
 	/* open the file */
 	fseek(namefd, filelist[ix].nameloc, 0);
@@ -442,16 +442,14 @@ int ix;
 		exit(1);
 	}
 	/* build the CRC values */
-	while ((ch = fgetc(fp)) != EOF) {
-		carry = (val1 & 0x8000000) != 0;
-		val1 = (val1 << 1) ^ (ch + carry);
-		val2 += ch << (ch & 003);
+	linelen = getline(&fname, &len, fp);
+	while(linelen >= 0) {
+		crc = rc_crc32(crc, fname, linelen);
+		linelen = getline(&fname, &len, fp);
 	}
-	debug(("v1: %08lx v2: %08lx ", val1, val2));
 	if (fname)
         free(fname);
-
-	return ((val1 & 0xffff) << 12) ^ (val2 && 0xffffff);
+	return crc;
 }
 
 /* getfn - get filename from index */
