@@ -25,8 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <getopt.h>
 
-int att_getopt();
 int fullcmp();
 uint32_t rc_crc32();
 
@@ -65,9 +65,6 @@ long max_files = 0;				/* entries allocated in the array */
 int linkflag = 1;				/* show links */
 int DebugFlg = 0;				/* inline debug flag */
 FILE *namefd;					/* file for names */
-extern int
-	opterr,						/* error control flag */
-	optind;						/* index for next arg */
 
 /* help message, in a table format */
 static char *HelpMsg[] = {
@@ -114,29 +111,37 @@ char *argv[];
 	filedesc *curptr;			/* pointer to current storage loc */
 	size_t len = 0;
 	ssize_t linelen = 0;
+	int exitflag = 1;
 
 	/* parse options, if any */
 	opterr = 0;
-	while ((ch = att_getopt(argc, argv, OPTSTR)) != EOF) {
+	static struct option long_options[] = {
+		{"help", no_argument, NULL, 'h'},
+	    {"no-links", no_argument, NULL, 'l'},
+	    {"debug", optional_argument, NULL, 'd'},
+	    {NULL, 0, NULL, 0}
+	};
+
+	while((ch = getopt_long(argc, argv, "hld::", long_options, NULL)) != -1) {
 		switch (ch) {
-		case 'l': /* set link flag */
-			linkflag = 0;
-			break;
+			case 'l': /* set link flag */
+				linkflag = 0;
+				break;
 #ifdef DEBUG
-		case 'd': /* debug */
-			++DebugFlg;
-			break;
+			case 'd': /* debug */
+				if(optarg)
+					DebugFlg = atoi(optarg);
+				else
+					++DebugFlg;
+				break;
 #endif /* ?DEBUG */
-		case 'h': /* help */
-			for (ch = 0; ch < HelpLen; ++ch) {
+			case 'h': /* help */
+				exitflag = 0;
+			case '?':
+				for (ch = 0; ch < HelpLen; ++ch) {
 				printf("%s\n", HelpMsg[ch]);
-			}
-			exit(0);
-		case '?':
-			for (ch = 0; ch < HelpLen; ++ch) {
-				printf("%s\n", HelpMsg[ch]);
-			}
-			exit(1);
+				}
+				exit(exitflag);
 		}
 	}
 
