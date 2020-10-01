@@ -26,11 +26,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <getopt.h>
-
-int fullcmp();
-uint32_t rc_crc32();
-
-/* parameters */
+#include "crc32.h"
 
 /* constants */
 #define EOS		((char) '\0')	/* end of string */
@@ -96,6 +92,7 @@ void scan2();					/* do full compare if needed */
 void scan3();					/* print the results */
 uint32_t get_crc();				/* get crc32 on a file */
 char *getfn();					/* get a filename by index */
+int fullcmp();					/* full compare two filedesc's */
 
 int finddup_main(argc, argv)
 int argc;
