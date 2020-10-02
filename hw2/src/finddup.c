@@ -86,13 +86,13 @@ static char *SCCSid[] = {
 };
 #endif
 
-int comp1();				/* compare two filedesc's */
+static int comp1();				/* compare two filedesc's */
 static void scan1();			/* make the CRC scan */
 static void scan2();			/* do full compare if needed */
 static void scan3();			/* print the results */
 static uint32_t get_crc();		/* get crc32 on a file */
 static char *getfn();			/* get a filename by index */
-int fullcmp();					/* full compare two filedesc's */
+static int fullcmp();			/* full compare two filedesc's */
 
 int finddup_main(argc, argv)
 int argc;
@@ -195,8 +195,10 @@ char *argv[];
 		}
 
 		/* check for regular file */
-		if(!S_ISREG(statbuf.st_mode))
+		if(!(S_ISREG(statbuf.st_mode))) {
+			fprintf(stderr, "%s - ignored: Not a regular file\n", curfile);
 			continue;
+		}
 
 		/* check for zero length files */
 		if ( statbuf.st_size == 0) {
