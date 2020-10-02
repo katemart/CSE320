@@ -186,7 +186,7 @@ char *argv[];
 		curfile[linelen-1] = EOS;
 
 		/* add the data for this one */
-		if (stat(curfile, &statbuf)) {
+		if (lstat(curfile, &statbuf)) {
 			fprintf(stderr, "%c  %s - ",
 				(firsterr++ == 0 ? '\n' : '\r'), curfile
 			);
