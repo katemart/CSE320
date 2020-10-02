@@ -127,7 +127,7 @@ char *argv[];
 #ifdef DEBUG
 			case 'd': /* debug */
 				if(optarg)
-					DebugFlg += atoi(optarg);
+					DebugFlg = atoi(optarg);
 				else
 					++DebugFlg;
 				break;
