@@ -37,7 +37,7 @@
 /* macros */
 #ifdef DEBUG
 #define debug(X) if (DebugFlg) printf X
-#define OPTSTR	"lhd"
+#define OPTSTR	"lhd::"
 #else
 #define debug(X)
 #define OPTSTR	"lh"
@@ -115,19 +115,29 @@ char *argv[];
 	static struct option long_options[] = {
 		{"help", no_argument, NULL, 'h'},
 	    {"no-links", no_argument, NULL, 'l'},
+#ifdef DEBUG
 	    {"debug", optional_argument, NULL, 'd'},
+#endif
 	    {NULL, 0, NULL, 0}
 	};
 
-	while((ch = getopt_long(argc, argv, "hld::", long_options, NULL)) != -1) {
+	while((ch = getopt_long(argc, argv, OPTSTR, long_options, NULL)) != -1) {
 		switch (ch) {
 			case 'l': /* set link flag */
 				linkflag = 0;
 				break;
 #ifdef DEBUG
 			case 'd': /* debug */
-				if(optarg)
-					DebugFlg = atoi(optarg);
+				if(optarg) {
+					int num, chars_passed;
+					int value = sscanf(optarg, "%d%n", &num, &chars_passed);
+					int optarg_len = strlen(optarg);
+					if(value != 1 || (value == 1 && optarg_len != chars_passed) || num < 0) {
+						printf("Debug level %s is not a valid positive integer\n", optarg);
+						exit(exitflag);
+					} else
+						DebugFlg = num;
+				}
 				else
 					++DebugFlg;
 				break;
