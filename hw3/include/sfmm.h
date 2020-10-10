@@ -175,8 +175,8 @@ struct {
  * size class.  The first list holds blocks of the minimum size M.  The second list holds
  * blocks of size (M, 2M].  The third list holds blocks whose size is in the interval (2M, 4M].
  * The fourth list holds blocks whose size is in the interval (4M, 8M], and so on.
- * This continues up to the interval (128M, 512M], and then the last list holds all blocks
- * of size greater than 512M.
+ * This continues up to the interval (128M, 256M], and then the last list holds all blocks
+ * of size greater than 256M.
  *
  * Each of the circular, doubly linked lists has a "dummy" block used as the list header.
  * This dummy block is always linked between the last and the first element of the list.
@@ -230,6 +230,23 @@ void *sf_realloc(void *ptr, size_t size);
  * If ptr is invalid, the function calls abort() to exit the program.
  */
 void sf_free(void *ptr);
+
+/*
+ * Allocates a block of memory with a specified alignment.
+ *
+ * @param align The alignment required of the returned pointer.
+ * @param size The number of bytes requested to be allocated.
+ *
+ * @return If align is not a power of two or is less than the minimum block size,
+ * then NULL is returned and sf_errno is set to EINVAL.
+ * If size is 0, then NULL is returned without setting sf_errno.
+ * Otherwise, if the allocation is successful a pointer to a valid region of memory
+ * of the requested size and with the requested alignment is returned.
+ * If the allocation is not successful, then NULL is returned and sf_errno is set
+ * to ENOMEM.
+ */
+void *sf_memalign(size_t size, size_t align);
+
 
 /* sfutil.c: Helper functions already created for this assignment. */
 
