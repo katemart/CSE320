@@ -8,21 +8,20 @@
 #include <string.h>
 #include "debug.h"
 #include "sfmm.h"
+#define BLOCK_SIZE_MASK (~(THIS_BLOCK_ALLOCATED | PREV_BLOCK_ALLOCATED | 1))
 
 void *search_quick_lists(size_t block_size) {
-	sf_block *curr_block;
 	for(int i = 0; i < NUM_QUICK_LISTS; i++) {
 		// check if the list is empty, if so return NULL
 		if(sf_quick_lists[i].first == NULL)
-			break;
+			continue;
 		/**
 		 * if list is not empty, get block size and check if passed in block size
 		 * is equal. If so, return that block
 		 */
-		curr_block = sf_quick_lists[i].first;
-		size_t header = sf_quick_lists[i].first->header;
-		header = header&0x8;
-		if(header == block_size) {
+		sf_block *curr_block = sf_quick_lists[i].first;
+		size_t curr_block_size = curr_block->header&BLOCK_SIZE_MASK;
+		if(curr_block_size == block_size) {
 			// set "first" to point to "next" in list
 			sf_quick_lists[i].first = sf_quick_lists[i].first->body.links.next;
 			return curr_block;
@@ -32,6 +31,20 @@ void *search_quick_lists(size_t block_size) {
 }
 
 void *search_free_lists(size_t block_size) {
+	for(int i = 0; i < NUM_FREE_LISTS; i++) {
+		// get valid "start" block of free_list
+		sf_block *first_block = sf_free_list_heads[i].body.links.next;
+		// set temp var
+		sf_block *temp_block = first_block;
+		// check block size through list until it has reached beginning again
+		while(temp_block->body.links.next != first_block) {
+			size_t temp_block_size = temp_block->header&BLOCK_SIZE_MASK;
+			if(temp_block_size >= block_size) {
+				return temp_block;
+			}
+			temp_block = temp_block->body.links.next;
+		}
+	}
 	return NULL;
 }
 
@@ -50,11 +63,16 @@ void *sf_malloc(size_t size) {
 		if(alloc_block_size < 32)
 			alloc_block_size = 32;
 		// check if sf_malloc is called for the first time, if so "get" space
-		int first_call_flag = 0;
-		if(!first_call_flag) {
+		if(sf_mem_start() == sf_mem_end()) {
+			debug("FIRST CALL");
 			sf_mem_grow();
-			first_call_flag = 1;
+			// first, link the lists together in order to traverse
+			for(int i = 0; i < NUM_FREE_LISTS; i++) {
+				sf_free_list_heads[i].body.links.prev = &sf_free_list_heads[i];
+				sf_free_list_heads[i].body.links.next = &sf_free_list_heads[i];
+			}
 		}
+		// check the quick lists to see if they contain a block of that size
 		search_quick_lists(alloc_block_size);
 
 	}
