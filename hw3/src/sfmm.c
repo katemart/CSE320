@@ -1,3 +1,4 @@
+
 /**
  * All functions you make for the assignment must be implemented in this file.
  * Do not submit your assignment with a main function in this file.
@@ -30,8 +31,21 @@ void *search_quick_lists(size_t block_size) {
 	return NULL;
 }
 
-void *search_free_lists(size_t block_size) {
+int find_class_index(size_t block_size) {
+	// set minimum block size
+	int M = 32;
+	// if given block size is within partitioned class size, return corresponding index
 	for(int i = 0; i < NUM_FREE_LISTS; i++) {
+		if(block_size <= M)
+			return i;
+		M *= 2;
+	}
+	// set default value
+	return NUM_FREE_LISTS-1;
+}
+
+void *search_free_lists(size_t block_size) {
+	for(int i = find_class_index(block_size); i < NUM_FREE_LISTS; i++) {
 		// get valid "start" block of free_list
 		sf_block *first_block = sf_free_list_heads[i].body.links.next;
 		// set temp var
