@@ -7,13 +7,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "debug.h"
 #include "sfmm.h"
 #define BLOCK_SIZE_MASK (~(THIS_BLOCK_ALLOCATED | PREV_BLOCK_ALLOCATED | 1))
 
 void *search_quick_lists(size_t block_size) {
 	for(int i = 0; i < NUM_QUICK_LISTS; i++) {
-		// check if the list is empty, if so return NULL
+		/* check if the list is empty, if so return NULL */
 		if(sf_quick_lists[i].first == NULL)
 			continue;
 		/**
@@ -23,7 +24,7 @@ void *search_quick_lists(size_t block_size) {
 		sf_block *curr_block = sf_quick_lists[i].first;
 		size_t curr_block_size = curr_block->header&BLOCK_SIZE_MASK;
 		if(curr_block_size == block_size) {
-			// set "first" to point to "next" in list
+			/* set "first" to point to "next" in list */
 			sf_quick_lists[i].first = sf_quick_lists[i].first->body.links.next;
 			return curr_block;
 		}
@@ -32,25 +33,26 @@ void *search_quick_lists(size_t block_size) {
 }
 
 int find_class_index(size_t block_size) {
-	// set minimum block size
+	/* set minimum block size */
 	int M = 32;
-	// if given block size is within partitioned class size, return corresponding index
+	/* if given block size is within partitioned class size, return corresponding index */
 	for(int i = 0; i < NUM_FREE_LISTS; i++) {
 		if(block_size <= M)
 			return i;
 		M *= 2;
 	}
-	// set default value
+	/* set default index value */
 	return NUM_FREE_LISTS-1;
 }
 
 void *search_free_lists(size_t block_size) {
+	/* search free lists, starting from the list for the determined size class */
 	for(int i = find_class_index(block_size); i < NUM_FREE_LISTS; i++) {
-		// get valid "start" block of free_list
+		/* get valid "start" block of free_list */
 		sf_block *first_block = sf_free_list_heads[i].body.links.next;
-		// set temp var
+		/* set temp var */
 		sf_block *temp_block = first_block;
-		// check block size through list until it has reached beginning again
+		/* check block size through list until it has reached beginning again */
 		while(temp_block->body.links.next != first_block) {
 			size_t temp_block_size = temp_block->header&BLOCK_SIZE_MASK;
 			if(temp_block_size >= block_size) {
@@ -62,8 +64,53 @@ void *search_free_lists(size_t block_size) {
 	return NULL;
 }
 
+void *find_block(size_t block_size) {
+	/* first search through quick lists */
+	sf_block *block = search_quick_lists(block_size);
+	/* if a block is not found in quick lists, search through free lists */
+	if(block == NULL) {
+		/* first get indexes of class sizes, then search */
+		find_class_index(block_size);
+		block = search_free_lists(block_size);
+	}
+	return block;
+}
+
+void *attempt_split(sf_block *block, size_t block_size_needed) {
+	/* get block size found */
+	size_t block_size_found = block->header&BLOCK_SIZE_MASK;
+	/* get remainder */
+	size_t remainder = block_size_found - block_size_needed;
+	/**
+	 * if remainder results in splinter, return found block unchanged
+	 * otherwise split and return new block
+	 */
+	if(remainder < 32)
+		return block;
+	/* adjust size of (original) block passed in */
+	block_size_found = block_size_needed;
+	/* get address of remainder and put into new block
+	 * note: convert header pointer to char* in order to do ptr arithmetic
+	 * (without having to divide by data type size)
+	 */
+	sf_block *new_block = (sf_block*)((char*)block + block_size_needed);
+	/* put remainder portion directly into main free lists */
+	/* adjust size of new block */
+	size_t new_block_size = new_block->header&BLOCK_SIZE_MASK;
+	new_block_size = remainder;
+	/* set header */
+	new_block->header = new_block_size;
+	/* set footer */
+	new_block->prev_footer = new_block->header ^ MAGIC;
+	return new_block;
+}
+
+void put_split_block_in_list() {
+
+}
+
 void *sf_malloc(size_t size) {
-	// if request size is not zero proceed, else return NULL
+	/* if request size is not zero proceed, else return NULL */
 	if(size > 0) {
 		/**
 		 * determine ACTUAL size of block to be allocated by adding header
@@ -73,22 +120,27 @@ void *sf_malloc(size_t size) {
 		int remainder = alloc_block_size % 16;
 		if(remainder != 0)
 			alloc_block_size += 16 - remainder;
-		// if block size is smaller than 32, set to 32 as minimum
+		/* if block size is smaller than 32, set to 32 as minimum */
 		if(alloc_block_size < 32)
 			alloc_block_size = 32;
-		// check if sf_malloc is called for the first time, if so "get" space
+		/* check if sf_malloc is called for the first time, if so "get" space */
 		if(sf_mem_start() == sf_mem_end()) {
 			debug("FIRST CALL");
 			sf_mem_grow();
-			// first, link the lists together in order to traverse
+			/* first, link the lists together in order to traverse */
 			for(int i = 0; i < NUM_FREE_LISTS; i++) {
 				sf_free_list_heads[i].body.links.prev = &sf_free_list_heads[i];
 				sf_free_list_heads[i].body.links.next = &sf_free_list_heads[i];
 			}
 		}
-		// check the quick lists to see if they contain a block of that size
-		search_quick_lists(alloc_block_size);
+		/* check the quick and free lists to see if they contain a block of that size */
+		sf_block *block = find_block(alloc_block_size);
 
+
+
+
+	} else {
+		sf_errno = ENOMEM;
 	}
 	sf_show_heap();
     return NULL;
