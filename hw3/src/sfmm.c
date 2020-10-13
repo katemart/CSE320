@@ -17,7 +17,7 @@ void *search_quick_lists(size_t block_size) {
 		/* check if the list is empty, if so return NULL */
 		if(sf_quick_lists[i].first == NULL)
 			continue;
-		/**
+		/*
 		 * if list is not empty, get block size and check if passed in block size
 		 * is equal. If so, return that block
 		 */
@@ -81,38 +81,46 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	size_t block_size_found = block->header&BLOCK_SIZE_MASK;
 	/* get remainder */
 	size_t remainder = block_size_found - block_size_needed;
-	/**
-	 * if remainder results in splinter, return found block unchanged
+	/*
+	 * if remainder results in splinter, return found block (w/ alloc flag set)
 	 * otherwise split and return new block
 	 */
-	if(remainder < 32)
+	if(remainder < 32) {
+		debug("NO SPLIT");
+		block->header = block->header | THIS_BLOCK_ALLOCATED;
 		return block;
-	/* adjust size of (original) block passed in */
-	block_size_found = block_size_needed;
-	/* get address of remainder and put into new block
+	}
+	debug("SPLIT");
+	/*
+	 * set header of "block"
+	 * adjust size and flag of (original) block passed in, in order to satify
+	 * request (this will be "lower part")
+	 * note: we must account for PREV_BLOCK_ALLOCATED
+	 */
+	int prev_alloc = block->header & PREV_BLOCK_ALLOCATED;
+	block->header = block_size_needed | THIS_BLOCK_ALLOCATED | prev_alloc;
+	/*
+	 * get address of remainder and put into new block (this will be "upper part")
 	 * note: convert header pointer to char* in order to do ptr arithmetic
 	 * (without having to divide by data type size)
 	 */
-	sf_block *new_block = (sf_block*)((char*)block + block_size_needed);
-	/* put remainder portion directly into main free lists */
-	/* adjust size of new block */
-	size_t new_block_size = new_block->header&BLOCK_SIZE_MASK;
-	new_block_size = remainder;
-	/* set header */
-	new_block->header = new_block_size;
-	/* set footer */
-	new_block->prev_footer = new_block->header ^ MAGIC;
-	return new_block;
-}
-
-void put_split_block_in_list() {
-
+	sf_block *new_block = (sf_block *)((char *)block + block_size_needed);
+	/*
+	 * set header of "new block"
+	 * note: the prev block is "block", in which case prev_alloc flag is on
+	 */
+	size_t new_block_size = remainder;
+	new_block->header = new_block_size | PREV_BLOCK_ALLOCATED;
+	/* set footer of "new_block" */
+	sf_block *new_block_footer = (sf_block *)((char *)new_block + new_block_size);
+	new_block_footer->prev_footer = new_block->header ^ MAGIC;
+	return block;
 }
 
 void *sf_malloc(size_t size) {
 	/* if request size is not zero proceed, else return NULL */
 	if(size > 0) {
-		/**
+		/*
 		 * determine ACTUAL size of block to be allocated by adding header
 		 * (64 bits = 8 bytes) and necessary padding for multiple of 16 (if needed)
 		 */
