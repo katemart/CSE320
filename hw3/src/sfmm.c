@@ -76,6 +76,21 @@ void *find_block(size_t block_size) {
 	return block;
 }
 
+void insert_block_in_free_list(sf_block *block, int class_index) {
+	/* set dummy sentinel node */
+	sf_block *sentinel_node = &sf_free_list_heads[class_index];
+	/* set block's prev (i.e. dummy node) and next (i.e. block after dummy node)
+	 * (this sets block as first in list after sentinel node)
+	 */
+	block->body.links.next = sentinel_node->body.links.next;
+	block->body.links.prev = sentinel_node;
+	/* set sentinel node's prev and next
+	 * note: sentinel node's previous is the same as sentinel node's next's previous
+	 */
+	sentinel_node->body.links.next = block;
+	(sentinel_node->body.links.next)->body.links.prev = block;
+}
+
 void *attempt_split(sf_block *block, size_t block_size_needed) {
 	/* get block size found */
 	size_t block_size_found = block->header&BLOCK_SIZE_MASK;
