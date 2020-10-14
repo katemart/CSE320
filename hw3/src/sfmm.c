@@ -13,6 +13,7 @@
 #define BLOCK_SIZE_MASK (~(THIS_BLOCK_ALLOCATED | PREV_BLOCK_ALLOCATED | 1))
 
 void *search_quick_lists(size_t block_size) {
+	debug("SEARCH QUICK LISTS");
 	for(int i = 0; i < NUM_QUICK_LISTS; i++) {
 		/* check if the list is empty, if so return NULL */
 		if(sf_quick_lists[i].first == NULL)
@@ -33,6 +34,7 @@ void *search_quick_lists(size_t block_size) {
 }
 
 int find_class_index(size_t block_size) {
+	debug("FIND CLASS INDEX");
 	/* set minimum block size */
 	int M = 32;
 	/* if given block size is within partitioned class size, return corresponding index */
@@ -45,9 +47,10 @@ int find_class_index(size_t block_size) {
 	return NUM_FREE_LISTS-1;
 }
 
-void *search_free_lists(size_t block_size) {
+void *search_free_lists(size_t block_size, int class_index) {
+	debug("SEARCH FREE LISTS");
 	/* search free lists, starting from the list for the determined size class */
-	for(int i = find_class_index(block_size); i < NUM_FREE_LISTS; i++) {
+	for(int i = class_index; i < NUM_FREE_LISTS; i++) {
 		/* get valid "start" block of free_list */
 		sf_block *first_block = sf_free_list_heads[i].body.links.next;
 		/* set temp var */
@@ -64,19 +67,19 @@ void *search_free_lists(size_t block_size) {
 	return NULL;
 }
 
-void *find_block(size_t block_size) {
+void *find_block(size_t block_size, int class_index) {
+	debug("FINDING BLOCK IN LISTS");
 	/* first search through quick lists */
 	sf_block *block = search_quick_lists(block_size);
 	/* if a block is not found in quick lists, search through free lists */
 	if(block == NULL) {
-		/* first get indexes of class sizes, then search */
-		find_class_index(block_size);
-		block = search_free_lists(block_size);
+		block = search_free_lists(block_size, class_index);
 	}
 	return block;
 }
 
 void insert_block_in_free_list(sf_block *block, int class_index) {
+	debug("INSERTING BLOCK INTO FREE LIST");
 	/* set dummy sentinel node */
 	sf_block *sentinel_node = &sf_free_list_heads[class_index];
 	/* set block's prev (i.e. dummy node) and next (i.e. block after dummy node)
@@ -86,9 +89,10 @@ void insert_block_in_free_list(sf_block *block, int class_index) {
 	block->body.links.prev = sentinel_node;
 	/* set sentinel node's prev and next
 	 * note: sentinel node's previous is the same as sentinel node's next's previous
+	 * (this has to be called before overwritting it)
 	 */
-	sentinel_node->body.links.next = block;
 	(sentinel_node->body.links.next)->body.links.prev = block;
+	sentinel_node->body.links.next = block;
 }
 
 void *attempt_split(sf_block *block, size_t block_size_needed) {
@@ -129,6 +133,11 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	/* set footer of "new_block" */
 	sf_block *new_block_footer = (sf_block *)((char *)new_block + new_block_size);
 	new_block_footer->prev_footer = new_block->header ^ MAGIC;
+	/* get index from free list corresponding to block */
+	size_t block_size = block->header&BLOCK_SIZE_MASK;
+	int class_index = find_class_index(block_size);
+	/* insert "remainder" block into main free lists" */
+	insert_block_in_free_list(new_block, class_index);
 	return block;
 }
 
@@ -149,23 +158,40 @@ void *sf_malloc(size_t size) {
 		/* check if sf_malloc is called for the first time, if so "get" space */
 		if(sf_mem_start() == sf_mem_end()) {
 			debug("FIRST CALL");
-			sf_mem_grow();
-			/* first, link the lists together in order to traverse */
+			/* link the lists together in order to traverse */
 			for(int i = 0; i < NUM_FREE_LISTS; i++) {
 				sf_free_list_heads[i].body.links.prev = &sf_free_list_heads[i];
 				sf_free_list_heads[i].body.links.next = &sf_free_list_heads[i];
 			}
+			/* initialize */
+			sf_block *init_block = sf_mem_grow();
+			if(init_block == NULL) {
+				sf_errno = ENOMEM;
+				return NULL;
+			}
+			size_t init_block_size = 4080;
+			init_block->header = init_block_size;
+			/* set footer of block */
+			sf_block *init_block_footer = (sf_block *)((char *)init_block + init_block_size);
+			init_block_footer->prev_footer = init_block->header  ^ MAGIC;
+			/* link block in list */
+			int init_class_index = find_class_index(init_block_size);
+			debug("%d", init_class_index);
+			insert_block_in_free_list(init_block, init_class_index);
 		}
+		/* find what class index from free-list the size belongs to */
+		int class_index = find_class_index(alloc_block_size);
 		/* check the quick and free lists to see if they contain a block of that size */
-		sf_block *block = find_block(alloc_block_size);
-
-
-
-
+		sf_block *block = find_block(alloc_block_size, class_index);
+		if(block != NULL) {
+			block = attempt_split(block, alloc_block_size);
+			block->header ^= MAGIC;
+		}
+		return block->body.payload;
 	} else {
 		sf_errno = ENOMEM;
 	}
-	sf_show_heap();
+	//sf_show_heap();
     return NULL;
 }
 
