@@ -134,14 +134,17 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	sf_block *new_block_footer = (sf_block *)((char *)new_block + new_block_size);
 	new_block_footer->prev_footer = new_block->header ^ MAGIC;
 	/* get index from free list corresponding to block */
-	size_t block_size = block->header&BLOCK_SIZE_MASK;
+	size_t block_size = new_block->header&BLOCK_SIZE_MASK;
 	int class_index = find_class_index(block_size);
+	debug("%d", class_index);
 	/* insert "remainder" block into main free lists" */
 	insert_block_in_free_list(new_block, class_index);
+	//sf_show_free_lists();
 	return block;
 }
 
 void *sf_malloc(size_t size) {
+	debug("MAGIC %lu\n", sf_magic());
 	/* if request size is not zero proceed, else return NULL */
 	if(size > 0) {
 		/*
@@ -176,8 +179,9 @@ void *sf_malloc(size_t size) {
 			init_block_footer->prev_footer = init_block->header ^ MAGIC;
 			/* link block in list */
 			int init_class_index = find_class_index(init_block_size);
-			//debug("%d", init_class_index);
+			debug("%d", init_class_index);
 			insert_block_in_free_list(init_block, init_class_index);
+			//sf_show_free_lists();
 		}
 		/* find what class index from free-list the size belongs to */
 		int class_index = find_class_index(alloc_block_size);
@@ -213,6 +217,7 @@ void *sf_malloc(size_t size) {
 		}
 		/* return payload bc we dont want to overwrite the header */
 		//sf_show_heap();
+		//sf_show_free_lists();
 		return block->body.payload;
 	} else if(size < 0) {
 		sf_errno = ENOMEM;
