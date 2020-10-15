@@ -163,7 +163,7 @@ void *sf_malloc(size_t size) {
 				sf_free_list_heads[i].body.links.prev = &sf_free_list_heads[i];
 				sf_free_list_heads[i].body.links.next = &sf_free_list_heads[i];
 			}
-			/* initialize */
+			/* initialize for first allocation */
 			sf_block *init_block = sf_mem_grow();
 			if(init_block == NULL) {
 				sf_errno = ENOMEM;
@@ -173,22 +173,48 @@ void *sf_malloc(size_t size) {
 			init_block->header = init_block_size;
 			/* set footer of block */
 			sf_block *init_block_footer = (sf_block *)((char *)init_block + init_block_size);
-			init_block_footer->prev_footer = init_block->header  ^ MAGIC;
+			init_block_footer->prev_footer = init_block->header ^ MAGIC;
 			/* link block in list */
 			int init_class_index = find_class_index(init_block_size);
-			debug("%d", init_class_index);
+			//debug("%d", init_class_index);
 			insert_block_in_free_list(init_block, init_class_index);
 		}
 		/* find what class index from free-list the size belongs to */
 		int class_index = find_class_index(alloc_block_size);
-		/* check the quick and free lists to see if they contain a block of that size */
+		/* check the quick and free lists to see if they contain a block of that size
+		 * if they do not, then use sf_mem_grow to request more memory
+		 */
 		sf_block *block = find_block(alloc_block_size, class_index);
+		/* if block is found, split if necessary
+		  * else, if block is not found keep growing memory until found or we run out of mem
+		 */
 		if(block != NULL) {
+			/* if block is found in lists, remove block from lists
+			 * this is done by setting the block's prev's next to block's next
+			 * and setting the block's next's prev to block's prev
+			 */
+			(block->body.links.prev)->body.links.next = block->body.links.next;
+			(block->body.links.next)->body.links.prev = block->body.links.prev;
+			/* now try to split (if possible) */
 			block = attempt_split(block, alloc_block_size);
+			/* XOR header w MAGIC to un-obfuscate */
 			block->header ^= MAGIC;
+		} else {
+			/** TO DO **/
+			debug("BLOCK NOT FOUND, EXTENDING MENORY");
+			while(1) {
+				sf_block *new_block = sf_mem_grow();
+				/* if the allocator can't satisfy request, set errno and return NULL */
+				if(new_block == NULL) {
+					sf_errno = ENOMEM;
+					return NULL;
+				}
+			}
 		}
+		/* return payload bc we dont want to overwrite the header */
+		//sf_show_heap();
 		return block->body.payload;
-	} else {
+	} else if(size < 0) {
 		sf_errno = ENOMEM;
 	}
 	//sf_show_heap();
