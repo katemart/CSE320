@@ -23,7 +23,8 @@ void *search_quick_lists(size_t block_size) {
 		 * is equal. If so, return that block
 		 */
 		sf_block *curr_block = sf_quick_lists[i].first;
-		size_t curr_block_size = curr_block->header&BLOCK_SIZE_MASK;
+		/* header value needs to be un-xored */
+		size_t curr_block_size = (curr_block->header^MAGIC)&BLOCK_SIZE_MASK;
 		if(curr_block_size == block_size) {
 			/* set "first" to point to "next" in list */
 			sf_quick_lists[i].first = sf_quick_lists[i].first->body.links.next;
@@ -57,7 +58,8 @@ void *search_free_lists(size_t block_size, int class_index) {
 		sf_block *temp_block = first_block;
 		/* check block size through list until it has reached beginning again */
 		while(temp_block->body.links.next != first_block) {
-			size_t temp_block_size = temp_block->header&BLOCK_SIZE_MASK;
+			/* header value needs to be un-xored */
+			size_t temp_block_size = (temp_block->header^MAGIC)&BLOCK_SIZE_MASK;
 			if(temp_block_size >= block_size) {
 				return temp_block;
 			}
@@ -96,8 +98,11 @@ void insert_block_in_free_list(sf_block *block, int class_index) {
 }
 
 void *attempt_split(sf_block *block, size_t block_size_needed) {
+	/* note: the header needs to be XORed each time it is assigned and un-XORed each
+	 * time it is retrieved
+	 */
 	/* get block size found */
-	size_t block_size_found = block->header&BLOCK_SIZE_MASK;
+	size_t block_size_found = (block->header^MAGIC)&BLOCK_SIZE_MASK;
 	/* get remainder */
 	size_t remainder = block_size_found - block_size_needed;
 	/*
@@ -106,7 +111,7 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	 */
 	if(remainder < 32) {
 		debug("NO SPLIT");
-		block->header = block->header | THIS_BLOCK_ALLOCATED;
+		block->header = ((block->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
 		return block;
 	}
 	debug("SPLIT");
@@ -116,8 +121,8 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	 * request (this will be "lower part")
 	 * note: we must account for PREV_BLOCK_ALLOCATED
 	 */
-	int prev_alloc = block->header & PREV_BLOCK_ALLOCATED;
-	block->header = block_size_needed | THIS_BLOCK_ALLOCATED | prev_alloc;
+	int prev_alloc = (block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
+	block->header = (block_size_needed | THIS_BLOCK_ALLOCATED | prev_alloc)^MAGIC;
 	/*
 	 * get address of remainder and put into new block (this will be "upper part")
 	 * note: convert header pointer to char* in order to do ptr arithmetic
@@ -129,14 +134,16 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	 * note: the prev block is "block", in which case prev_alloc flag is on
 	 */
 	size_t new_block_size = remainder;
-	new_block->header = new_block_size | PREV_BLOCK_ALLOCATED;
+	debug("REMAINDER %lu", remainder);
+	new_block->header = (new_block_size | PREV_BLOCK_ALLOCATED)^MAGIC;
 	/* set footer of "new_block" */
 	sf_block *new_block_footer = (sf_block *)((char *)new_block + new_block_size);
-	new_block_footer->prev_footer = new_block->header ^ MAGIC;
+	/* note: no need to XOR footer bc header is already XORed */
+	new_block_footer->prev_footer = new_block->header;
 	/* get index from free list corresponding to block */
-	size_t block_size = new_block->header&BLOCK_SIZE_MASK;
+	size_t block_size = (new_block->header^MAGIC)&BLOCK_SIZE_MASK;
 	int class_index = find_class_index(block_size);
-	debug("%d", class_index);
+	debug("INDEX %d", class_index);
 	/* insert "remainder" block into main free lists" */
 	insert_block_in_free_list(new_block, class_index);
 	//sf_show_free_lists();
@@ -173,15 +180,14 @@ void *sf_malloc(size_t size) {
 				return NULL;
 			}
 			size_t init_block_size = 4080;
-			init_block->header = init_block_size;
+			init_block->header = init_block_size ^ MAGIC;
 			/* set footer of block */
 			sf_block *init_block_footer = (sf_block *)((char *)init_block + init_block_size);
-			init_block_footer->prev_footer = init_block->header ^ MAGIC;
+			init_block_footer->prev_footer = init_block->header;
 			/* link block in list */
 			int init_class_index = find_class_index(init_block_size);
-			debug("%d", init_class_index);
+			debug("INDEX %d", init_class_index);
 			insert_block_in_free_list(init_block, init_class_index);
-			//sf_show_free_lists();
 		}
 		/* find what class index from free-list the size belongs to */
 		int class_index = find_class_index(alloc_block_size);
@@ -201,28 +207,26 @@ void *sf_malloc(size_t size) {
 			(block->body.links.next)->body.links.prev = block->body.links.prev;
 			/* now try to split (if possible) */
 			block = attempt_split(block, alloc_block_size);
-			/* XOR header w MAGIC to un-obfuscate */
-			block->header ^= MAGIC;
 		} else {
 			/** TO DO **/
-			debug("BLOCK NOT FOUND, EXTENDING MENORY");
+			debug("BLOCK NOT FOUND, EXTENDING MEMORY");
 			while(1) {
-				sf_block *new_block = sf_mem_grow();
+				void *new_page = sf_mem_grow();
 				/* if the allocator can't satisfy request, set errno and return NULL */
-				if(new_block == NULL) {
+				if(new_page == NULL) {
 					sf_errno = ENOMEM;
 					return NULL;
 				}
 			}
 		}
 		/* return payload bc we dont want to overwrite the header */
-		//sf_show_heap();
+		sf_show_heap();
 		//sf_show_free_lists();
 		return block->body.payload;
 	} else if(size < 0) {
 		sf_errno = ENOMEM;
 	}
-	//sf_show_heap();
+	sf_show_heap();
     return NULL;
 }
 
