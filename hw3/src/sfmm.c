@@ -12,7 +12,7 @@
 #include "sfmm.h"
 #define BLOCK_SIZE_MASK (~(THIS_BLOCK_ALLOCATED | PREV_BLOCK_ALLOCATED | 1))
 
-sf_block *last_block = NULL;
+static sf_block *last_block = NULL;
 
 void *search_quick_lists(size_t block_size) {
 	debug("SEARCH QUICK LISTS");
@@ -154,7 +154,8 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 }
 
 void coalesce(sf_block *prev_block, sf_block *curr_block) {
-	/* check if prev block is allocated */
+	debug("COALESCING");
+	/* check if prev block and curr block are allocated */
 	int prev_block_alloc = (prev_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 	int curr_block_alloc = (curr_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 	/* if previous block and current block are free, coalesce current block with previous block */
@@ -169,15 +170,19 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 		size_t prev_block_size = (prev_block->header^MAGIC)&BLOCK_SIZE_MASK;
 		size_t curr_block_size = (curr_block->header^MAGIC)&BLOCK_SIZE_MASK;
 		/* get size of new block */
-		size_t new_block_size = (prev_block_size + curr_block_size) - 16;
+		size_t new_block_size = (prev_block_size + curr_block_size);
 		/* update prev block's header */
-		prev_block->header = new_block_size^MAGIC;
+		prev_block->header = (new_block_size | prev_block_alloc)^MAGIC;
 		/* update prev block's footer */
 		sf_block *new_footer = (sf_block *)((char *)prev_block + new_block_size);
 		new_footer->prev_footer = prev_block->header;
 		/* insert "big" block into list */
 		int index = find_class_index(new_block_size);
 		insert_block_in_free_list(prev_block, index);
+		//sf_show_free_lists();
+	} else {
+		/* update last_block pointer to be new_page */
+		last_block = curr_block;
 	}
 }
 
@@ -208,6 +213,7 @@ void *sf_malloc(size_t size) {
 			sf_block *init_block = sf_mem_grow();
 			if(init_block == NULL) {
 				sf_errno = ENOMEM;
+				debug("SF_ERRNO: %s\n", strerror(sf_errno));
 				return NULL;
 			}
 			size_t init_block_size = 4080;
@@ -241,24 +247,25 @@ void *sf_malloc(size_t size) {
 			/* now try to split (if possible) */
 			block = attempt_split(block, alloc_block_size);
 		} else {
-			debug("BLOCK NOT FOUND, EXTENDING MEMORY");
 			while(1) {
+				debug("BLOCK NOT FOUND, EXTENDING MEMORY");
+				debug("LAST BLOCK SIZE %lu", ((last_block->header)^MAGIC)&BLOCK_SIZE_MASK);
 				/* extend heap by one additional page  of memory */
-				sf_block *new_page = sf_mem_grow() - 16;
-				sf_block *temp = new_page;
+				void *extend_mem = sf_mem_grow();
 				/* if the allocator can't satisfy request, set errno and return NULL */
-				if(new_page == NULL) {
+				if(extend_mem == NULL) {
 					sf_errno = ENOMEM;
+					debug("SF_ERRNO: %s\n", strerror(sf_errno));
 					return NULL;
 				}
+				sf_block *new_page = (sf_block *)(extend_mem - 16);
 				int prev_alloc = (last_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 				/* create new block */
-				size_t new_page_size = 4080;
+				size_t new_page_size = 4096;
 				new_page->header = (new_page_size | prev_alloc)^MAGIC;
-				size_t last_block_size = ((last_block->header)^MAGIC)&BLOCK_SIZE_MASK;
-				/* add last_block and new_page to free lists */
-				int last_block_class_index = find_class_index(last_block_size);
-				insert_block_in_free_list(last_block, last_block_class_index);
+				sf_block *new_page_footer = (sf_block *)((char *)new_page + new_page_size);
+				new_page_footer->prev_footer = new_page->header;
+				/* add new_page to free lists */
 				int new_page_class_index = find_class_index(new_page_size);
 				insert_block_in_free_list(new_page, new_page_class_index);
 				/* coalesce if possible */
@@ -269,20 +276,16 @@ void *sf_malloc(size_t size) {
 					(block->body.links.prev)->body.links.next = block->body.links.next;
 					(block->body.links.next)->body.links.prev = block->body.links.prev;
 					block = attempt_split(last_block, alloc_block_size);
-					/* update last_block pointer */
-					last_block = temp;
-					return block->body.payload;
+					//return block->body.payload;
+					break;
 				}
-				last_block = temp;
 			}
 		}
 		/* return payload bc we dont want to overwrite the header */
 		//sf_show_heap();
-		//sf_show_free_lists();
 		return block->body.payload;
-	} else if(size < 0) {
-		sf_errno = ENOMEM;
 	}
+	debug("SF_ERRNO: %s\n", strerror(sf_errno));
 	//sf_show_heap();
     return NULL;
 }
