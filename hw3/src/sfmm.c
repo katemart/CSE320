@@ -26,7 +26,7 @@ void *search_quick_lists(size_t block_size) {
 		 */
 		sf_block *curr_block = sf_quick_lists[i].first;
 		/* header value needs to be un-xored */
-		size_t curr_block_size = (curr_block->header^MAGIC)&BLOCK_SIZE_MASK;
+		size_t curr_block_size = (curr_block->header^MAGIC) & BLOCK_SIZE_MASK;
 		if(curr_block_size == block_size) {
 			/* set "first" to point to "next" in list */
 			sf_quick_lists[i].first = sf_quick_lists[i].first->body.links.next;
@@ -61,7 +61,7 @@ void *search_free_lists(size_t block_size, int class_index) {
 		/* check block size through list until it has reached beginning again */
 		while(next_block->body.links.next != first_block) {
 			/* header value needs to be un-xored */
-			size_t next_block_size = (next_block->header^MAGIC)&BLOCK_SIZE_MASK;
+			size_t next_block_size = (next_block->header^MAGIC) & BLOCK_SIZE_MASK;
 			if(next_block_size >= block_size) {
 				return next_block;
 			}
@@ -104,7 +104,7 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	 * time it is retrieved
 	 */
 	/* get block size found */
-	size_t block_size_found = (block->header^MAGIC)&BLOCK_SIZE_MASK;
+	size_t block_size_found = (block->header^MAGIC) & BLOCK_SIZE_MASK;
 	/* get remainder */
 	size_t remainder = block_size_found - block_size_needed;
 	/*
@@ -143,7 +143,7 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	/* note: no need to XOR footer bc header is already XORed */
 	new_block_footer->prev_footer = new_block->header;
 	/* get index from free list corresponding to block */
-	size_t block_size = (new_block->header^MAGIC)&BLOCK_SIZE_MASK;
+	size_t block_size = (new_block->header^MAGIC) & BLOCK_SIZE_MASK;
 	int class_index = find_class_index(block_size);
 	debug("INDEX %d", class_index);
 	/* insert "remainder" block into main free lists" */
@@ -167,8 +167,8 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 		(curr_block->body.links.prev)->body.links.next = curr_block->body.links.next;
 		(curr_block->body.links.next)->body.links.prev = curr_block->body.links.prev;
 		/* get block sizes */
-		size_t prev_block_size = (prev_block->header^MAGIC)&BLOCK_SIZE_MASK;
-		size_t curr_block_size = (curr_block->header^MAGIC)&BLOCK_SIZE_MASK;
+		size_t prev_block_size = (prev_block->header^MAGIC) & BLOCK_SIZE_MASK;
+		size_t curr_block_size = (curr_block->header^MAGIC) & BLOCK_SIZE_MASK;
 		/* get size of new block */
 		size_t new_block_size = (prev_block_size + curr_block_size);
 		/* update prev block's header */
@@ -249,7 +249,7 @@ void *sf_malloc(size_t size) {
 		} else {
 			while(1) {
 				debug("BLOCK NOT FOUND, EXTENDING MEMORY");
-				debug("LAST BLOCK SIZE %lu", ((last_block->header)^MAGIC)&BLOCK_SIZE_MASK);
+				debug("LAST BLOCK SIZE %lu", ((last_block->header)^MAGIC) & BLOCK_SIZE_MASK);
 				/* extend heap by one additional page  of memory */
 				void *extend_mem = sf_mem_grow();
 				/* if the allocator can't satisfy request, set errno and return NULL */
@@ -276,21 +276,53 @@ void *sf_malloc(size_t size) {
 					(block->body.links.prev)->body.links.next = block->body.links.next;
 					(block->body.links.next)->body.links.prev = block->body.links.prev;
 					block = attempt_split(last_block, alloc_block_size);
-					//return block->body.payload;
 					break;
 				}
 			}
 		}
-		/* return payload bc we dont want to overwrite the header */
 		//sf_show_heap();
+		/* return payload bc we dont want to overwrite the header */
 		return block->body.payload;
 	}
-	debug("SF_ERRNO: %s\n", strerror(sf_errno));
 	//sf_show_heap();
+	debug("SF_ERRNO: %s\n", strerror(sf_errno));
     return NULL;
 }
 
 void sf_free(void *pp) {
+	/* verify that the pointer being passed in belongs to an allocated block */
+	/* if pointer is NULL, call abort to exit program */
+	if(pp == NULL)
+		abort();
+	/* if pointer is NOT 16-byte aligned, call abort to exit program */
+	if(((unsigned long)pp & 15) != 0)
+		abort();
+	/* get block
+	 * note: need to do -16 because sf_mallco returns the block's payload, not actual block
+	 */
+	sf_block *block = pp - 16;
+	/* get block size */
+	size_t block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
+	/* get block's footer */
+	sf_block *block_footer = (sf_block *)((char *)block + block_size);
+	block_footer->prev_footer = block->header;
+	/* get alloc and prev_alloc bits */
+	int alloc = (block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+	/* if block size is valid, if not call abort to exit program */
+	if(block_size < 32)
+		abort();
+	/* if block size is NOT a multiple of 16, call abort to exit program */
+	if((block_size % 16) != 0)
+		abort();
+	/* if the header of the block is before the start of first block of the heap OR
+	 * the footer of the block is after the end of the last block in the heap,
+	 * call abort to exit programs
+	 */
+	if((void *)(&(block->header)) < sf_mem_start() || (void *)(&(block_footer)) > sf_mem_end())
+		abort();
+	/* if the allocated bit in the header is 0, call abort to exit program */
+	if(alloc == 0)
+		abort();
     return;
 }
 
