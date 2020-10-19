@@ -14,6 +14,15 @@
 
 static sf_block *last_block = NULL;
 
+int find_class_index_quick_lists(size_t block_size) {
+	debug("FIND CLASS INDEX QUICK LISTS");
+	for(int i = 0; i < NUM_QUICK_LISTS; i++) {
+		/* if given block size is within partitioned class size, return corresponding index */
+		return ((block_size - 32) / 16);
+	}
+	return 0;
+}
+
 void *search_quick_lists(size_t block_size) {
 	debug("SEARCH QUICK LISTS");
 	for(int i = 0; i < NUM_QUICK_LISTS; i++) {
@@ -36,8 +45,8 @@ void *search_quick_lists(size_t block_size) {
 	return NULL;
 }
 
-int find_class_index(size_t block_size) {
-	debug("FIND CLASS INDEX");
+int find_class_index_free_lists(size_t block_size) {
+	debug("FIND CLASS INDEX FREE LISTS");
 	/* set minimum block size */
 	int M = 32;
 	/* if given block size is within partitioned class size, return corresponding index */
@@ -144,7 +153,7 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	new_block_footer->prev_footer = new_block->header;
 	/* get index from free list corresponding to block */
 	size_t block_size = (new_block->header^MAGIC) & BLOCK_SIZE_MASK;
-	int class_index = find_class_index(block_size);
+	int class_index = find_class_index_free_lists(block_size);
 	debug("INDEX %d", class_index);
 	/* insert "remainder" block into main free lists" */
 	insert_block_in_free_list(new_block, class_index);
@@ -177,7 +186,7 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 		sf_block *new_footer = (sf_block *)((char *)prev_block + new_block_size);
 		new_footer->prev_footer = prev_block->header;
 		/* insert "big" block into list */
-		int index = find_class_index(new_block_size);
+		int index = find_class_index_free_lists(new_block_size);
 		insert_block_in_free_list(prev_block, index);
 		//sf_show_free_lists();
 	} else {
@@ -222,14 +231,14 @@ void *sf_malloc(size_t size) {
 			sf_block *init_block_footer = (sf_block *)((char *)init_block + init_block_size);
 			init_block_footer->prev_footer = init_block->header;
 			/* link block in list */
-			int init_class_index = find_class_index(init_block_size);
+			int init_class_index = find_class_index_free_lists(init_block_size);
 			debug("INDEX %d", init_class_index);
 			insert_block_in_free_list(init_block, init_class_index);
 			/* set the last block to be this initial block (at this point) */
 			last_block = init_block;
 		}
 		/* find what class index from free-list the size belongs to */
-		int class_index = find_class_index(alloc_block_size);
+		int class_index = find_class_index_free_lists(alloc_block_size);
 		/* check the quick and free lists to see if they contain a block of that size
 		 * if they do not, then use sf_mem_grow to request more memory
 		 */
@@ -266,7 +275,7 @@ void *sf_malloc(size_t size) {
 				sf_block *new_page_footer = (sf_block *)((char *)new_page + new_page_size);
 				new_page_footer->prev_footer = new_page->header;
 				/* add new_page to free lists */
-				int new_page_class_index = find_class_index(new_page_size);
+				int new_page_class_index = find_class_index_free_lists(new_page_size);
 				insert_block_in_free_list(new_page, new_page_class_index);
 				/* coalesce if possible */
 				coalesce(last_block, new_page);
