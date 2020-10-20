@@ -20,25 +20,26 @@ int find_class_index_quick_lists(size_t block_size) {
 		/* if given block size is within partitioned class size, return corresponding index */
 		return ((block_size - 32) / 16);
 	}
-	return 0;
+	return -1;
 }
 
 void *search_quick_lists(size_t block_size) {
 	debug("SEARCH QUICK LISTS");
 	for(int i = 0; i < NUM_QUICK_LISTS; i++) {
+		/* get current block */
+		sf_block *curr_block = sf_quick_lists[i].first;
 		/* check if the list is empty, if so return NULL */
-		if(sf_quick_lists[i].first == NULL)
+		if(curr_block == NULL)
 			continue;
 		/*
 		 * if list is not empty, get block size and check if passed in block size
 		 * is equal. If so, return that block
 		 */
-		sf_block *curr_block = sf_quick_lists[i].first;
 		/* header value needs to be un-xored */
 		size_t curr_block_size = (curr_block->header^MAGIC) & BLOCK_SIZE_MASK;
 		if(curr_block_size == block_size) {
 			/* set "first" to point to "next" in list */
-			sf_quick_lists[i].first = sf_quick_lists[i].first->body.links.next;
+			curr_block = curr_block->body.links.next;
 			return curr_block;
 		}
 	}
@@ -164,11 +165,15 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 
 void coalesce(sf_block *prev_block, sf_block *curr_block) {
 	debug("COALESCING");
+	/* var to keep track of when coalescing is performed */
+	int coalesce = 0;
 	/* check if prev block and curr block are allocated */
 	int prev_block_alloc = (prev_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 	int curr_block_alloc = (curr_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 	/* if previous block and current block are free, coalesce current block with previous block */
 	if(!prev_block_alloc && !curr_block_alloc) {
+		/* set coalesce to true */
+		coalesce = 1;
 		/* remove prev_block from free lists */
 		(prev_block->body.links.prev)->body.links.next = prev_block->body.links.next;
 		(prev_block->body.links.next)->body.links.prev = prev_block->body.links.prev;
@@ -189,9 +194,14 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 		int index = find_class_index_free_lists(new_block_size);
 		insert_block_in_free_list(prev_block, index);
 		//sf_show_free_lists();
-	} else {
+	}
+	/* use coalesce var to set "last block" in heap accordingly */
+	if(prev_block == last_block && !coalesce) {
 		/* update last_block pointer to be new_page */
 		last_block = curr_block;
+	} else if(curr_block == last_block && coalesce) {
+		/* update last_block pointer to be prev_block */
+		last_block = prev_block;
 	}
 }
 
@@ -298,7 +308,33 @@ void *sf_malloc(size_t size) {
     return NULL;
 }
 
+void flush_quick_list(int class_index) {
+
+}
+
+void insert_block_in_quick_list(sf_block *block, int class_index) {
+	debug("INSERTING BLOCK INTO QUICK LIST");
+	/* first, try to insert into designated list if capacity hasn't been reached */
+	if(sf_quick_lists[class_index].length < QUICK_LIST_MAX) {
+		for(int i = 0; i < sf_quick_lists[class_index].length; i++) {
+			/* get head of list */
+			sf_block *head_block = sf_quick_lists[i].first;
+			/* if list is empty, set block as new head */
+			if(head_block == NULL) {
+				head_block = block;
+			}
+			/* link (what is to be) new head to old head */
+			block->body.links.next = head_block;
+			/* set passed in block as new head */
+			head_block = block;
+		}
+	} else {
+
+	}
+}
+
 void sf_free(void *pp) {
+	debug("FREEING BLOCK");
 	/* verify that the pointer being passed in belongs to an allocated block */
 	/* if pointer is NULL, call abort to exit program */
 	if(pp == NULL)
@@ -307,31 +343,51 @@ void sf_free(void *pp) {
 	if(((unsigned long)pp & 15) != 0)
 		abort();
 	/* get block
-	 * note: need to do -16 because sf_mallco returns the block's payload, not actual block
+	 * note: need to do -16 because sf_malloc returns the block's payload, not actual block
 	 */
 	sf_block *block = pp - 16;
 	/* get block size */
 	size_t block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
-	/* get block's footer */
-	sf_block *block_footer = (sf_block *)((char *)block + block_size);
-	block_footer->prev_footer = block->header;
-	/* get alloc and prev_alloc bits */
-	int alloc = (block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 	/* if block size is valid, if not call abort to exit program */
 	if(block_size < 32)
 		abort();
 	/* if block size is NOT a multiple of 16, call abort to exit program */
 	if((block_size % 16) != 0)
 		abort();
+	/* get block's footer */
+	sf_block *block_footer = (sf_block *)((char *)block + block_size);
+	block_footer->prev_footer = block->header;
 	/* if the header of the block is before the start of first block of the heap OR
 	 * the footer of the block is after the end of the last block in the heap,
 	 * call abort to exit programs
 	 */
 	if((void *)(&(block->header)) < sf_mem_start() || (void *)(&(block_footer)) > sf_mem_end())
 		abort();
-	/* if the allocated bit in the header is 0, call abort to exit program */
+	/* get alloc and prev_alloc bits */
+	int alloc = (block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+	int prev_alloc = (block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
+	/* if the allocated bit in the header is 0, call abort to exit program
+	 * (since we can't "free" an un-allocated block)
+	 */
 	if(alloc == 0)
 		abort();
+	/* if the prev_alloc field is zero but the alloc field in the prev block is not zero,
+	 * call abort to exit program
+	 * (as something must've gone wrong because these fields MUST ALWAYS match)
+	 */
+	if(prev_alloc == 0) {
+		/* if the previous block is not allocated (i.e. it is free), it has a footer
+		 * so we can read the footer to get the get previous block
+		 */
+		size_t prev_block_size = (block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
+		/* note: &block->prev_footer == block */
+		sf_block *prev_block = (sf_block *)((char *)block - prev_block_size);
+		int prev_block_alloc = (prev_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+		if(prev_block_alloc != 0)
+			abort();
+	}
+	/* if all of the above conditions pass, proceed to free block */
+
     return;
 }
 
