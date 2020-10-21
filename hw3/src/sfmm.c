@@ -13,6 +13,8 @@
 #define BLOCK_SIZE_MASK (~(THIS_BLOCK_ALLOCATED | PREV_BLOCK_ALLOCATED | 1))
 
 static sf_block *last_block = NULL;
+size_t header_size = sizeof(sf_header);
+size_t footer_size = sizeof(sf_footer);
 
 int find_class_index_quick_lists(size_t block_size) {
 	debug("FIND CLASS INDEX QUICK LISTS");
@@ -214,7 +216,7 @@ void *sf_malloc(size_t size) {
 		 * determine ACTUAL size of block to be allocated by adding header
 		 * (64 bits = 8 bytes) and necessary padding for multiple of 16 (if needed)
 		 */
-		size_t alloc_block_size = size + 8;
+		size_t alloc_block_size = size + header_size;
 		int remainder = alloc_block_size % 16;
 		if(remainder != 0)
 			alloc_block_size += 16 - remainder;
@@ -236,7 +238,7 @@ void *sf_malloc(size_t size) {
 				debug("SF_ERRNO: %s\n", strerror(sf_errno));
 				return NULL;
 			}
-			size_t init_block_size = 4080;
+			size_t init_block_size = PAGE_SZ - header_size - footer_size;
 			init_block->header = init_block_size^MAGIC;
 			/* set footer of block */
 			sf_block *init_block_footer = (sf_block *)((char *)init_block + init_block_size);
@@ -278,10 +280,10 @@ void *sf_malloc(size_t size) {
 					debug("SF_ERRNO: %s\n", strerror(sf_errno));
 					return NULL;
 				}
-				sf_block *new_page = (sf_block *)(extend_mem - 16);
+				sf_block *new_page = (sf_block *)(extend_mem - header_size - footer_size);
 				int prev_alloc = (last_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 				/* create new block */
-				size_t new_page_size = 4096;
+				size_t new_page_size = PAGE_SZ;
 				new_page->header = (new_page_size | prev_alloc)^MAGIC;
 				sf_block *new_page_footer = (sf_block *)((char *)new_page + new_page_size);
 				new_page_footer->prev_footer = new_page->header;
@@ -383,7 +385,7 @@ void sf_free(void *pp) {
 	/* get block
 	 * note: need to do -16 because sf_malloc returns the block's payload, not actual block
 	 */
-	sf_block *block = pp - 16;
+	sf_block *block = pp - header_size - footer_size;
 	/* get block size */
 	size_t block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
 	/* if block size is valid, if not call abort to exit program */
@@ -426,7 +428,7 @@ void sf_free(void *pp) {
 	}
 	/* if all of the above conditions pass, proceed to free block */
 	/* first, try to insert at the front of the quick list of the appropriate size */
-	int quick_list_max_block = 176;
+	int quick_list_max_block = ((NUM_QUICK_LISTS-1)*16) + 32;
 	if(block_size <= quick_list_max_block) {
 		int quick_list_class_index = find_class_index_quick_lists(block_size);
 		insert_block_in_quick_list(block, quick_list_class_index);
