@@ -172,6 +172,7 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 	int curr_block_alloc = (curr_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 	/* if previous block and current block are free, coalesce current block with previous block */
 	if(!prev_block_alloc && !curr_block_alloc) {
+		debug("ABLE TO COALESCE");
 		/* set coalesce to true */
 		coalesce = 1;
 		/* remove prev_block from free lists */
@@ -222,7 +223,7 @@ void *sf_malloc(size_t size) {
 			alloc_block_size = 32;
 		/* check if sf_malloc is called for the first time, if so "get" space */
 		if(sf_mem_start() == sf_mem_end()) {
-			debug("FIRST CALL");
+			debug("FIRST CALL SF_MALLOC");
 			/* link the lists together in order to traverse */
 			for(int i = 0; i < NUM_FREE_LISTS; i++) {
 				sf_free_list_heads[i].body.links.prev = &sf_free_list_heads[i];
@@ -299,37 +300,74 @@ void *sf_malloc(size_t size) {
 				}
 			}
 		}
-		//sf_show_heap();
+		sf_show_heap();
 		/* return payload bc we dont want to overwrite the header */
 		return block->body.payload;
 	}
-	//sf_show_heap();
+	sf_show_heap();
 	debug("SF_ERRNO: %s\n", strerror(sf_errno));
     return NULL;
 }
 
 void flush_quick_list(int class_index) {
-
+	sf_block *temp = NULL;
+	while(sf_quick_lists[class_index].length > 0) {
+		/* get first (aka start of list) */
+		sf_block *curr_block = sf_quick_lists[class_index].first;
+		/* get next block in heap */
+		int block_size = (curr_block->header^MAGIC) & BLOCK_SIZE_MASK;
+		sf_block *next_block = (sf_block *)((char *)curr_block + block_size);
+		/* get previous block in heap */
+		size_t prev_block_size = (curr_block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
+		/* note: &block->prev_footer == block */
+		sf_block *prev_block = (sf_block *)((char *)curr_block - prev_block_size);
+		if(curr_block != NULL) {
+			/* delete block from quick list */
+			if(curr_block->body.links.next != NULL) {
+				temp = curr_block;
+				curr_block = curr_block->body.links.next;
+			}
+			temp->body.links.next = NULL;
+			/*update list length */
+			sf_quick_lists[class_index].length--;
+			/* update block alloc bit to free */
+			int prev_alloc = (curr_block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
+			curr_block->header = (block_size | 0 | prev_alloc)^MAGIC;
+			/* add block to free list */
+			int free_list_index = find_class_index_free_lists(block_size);
+			insert_block_in_free_list(curr_block, free_list_index);
+			/* try to coalesce with next first */
+			if(next_block != NULL && (void *)next_block < sf_mem_end()) {
+				coalesce(curr_block, next_block);
+			}
+			/* now try to coalesce with previous */
+			if(prev_block != NULL && (void *)prev_block > sf_mem_start()) {
+				coalesce(prev_block, curr_block);
+			}
+		}
+	}
+	//sf_show_quick_lists();
 }
 
 void insert_block_in_quick_list(sf_block *block, int class_index) {
 	debug("INSERTING BLOCK INTO QUICK LIST");
 	/* first, try to insert into designated list if capacity hasn't been reached */
 	if(sf_quick_lists[class_index].length < QUICK_LIST_MAX) {
-		for(int i = 0; i < sf_quick_lists[class_index].length; i++) {
-			/* get head of list */
-			sf_block *head_block = sf_quick_lists[i].first;
-			/* if list is empty, set block as new head */
-			if(head_block == NULL) {
-				head_block = block;
-			}
-			/* link (what is to be) new head to old head */
-			block->body.links.next = head_block;
-			/* set passed in block as new head */
+		/* get head of list */
+		sf_block *head_block = sf_quick_lists[class_index].first;
+		/* if list is empty, set block as new head */
+		if(head_block == NULL) {
 			head_block = block;
 		}
+		/* link (what is to be) new head to old head */
+		block->body.links.next = head_block;
+		/* set passed in block as new head */
+		head_block = block;
+		/* update list's length */
+		sf_quick_lists[class_index].length++;
 	} else {
-
+		/* clear full quick list */
+		flush_quick_list(class_index);
 	}
 }
 
@@ -361,7 +399,7 @@ void sf_free(void *pp) {
 	 * the footer of the block is after the end of the last block in the heap,
 	 * call abort to exit programs
 	 */
-	if((void *)(&(block->header)) < sf_mem_start() || (void *)(&(block_footer)) > sf_mem_end())
+	if((void *)(&(block->header)) < sf_mem_start() || (void *)(block_footer) > sf_mem_end())
 		abort();
 	/* get alloc and prev_alloc bits */
 	int alloc = (block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
@@ -377,17 +415,47 @@ void sf_free(void *pp) {
 	 */
 	if(prev_alloc == 0) {
 		/* if the previous block is not allocated (i.e. it is free), it has a footer
-		 * so we can read the footer to get the get previous block
+		 * so we can read the footer (i.e, block's prev_footer) to check the prev_alloc bit
+		 * note: &block->prev_footer == block
 		 */
-		size_t prev_block_size = (block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
-		/* note: &block->prev_footer == block */
-		sf_block *prev_block = (sf_block *)((char *)block - prev_block_size);
-		int prev_block_alloc = (prev_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+		int prev_block_alloc = (block->prev_footer^MAGIC) & THIS_BLOCK_ALLOCATED;
 		if(prev_block_alloc != 0)
 			abort();
 	}
 	/* if all of the above conditions pass, proceed to free block */
-
+	/* first, try to insert at the front of the quick list of the appropriate size */
+	int quick_list_max_block = 176;
+	if(block_size <= quick_list_max_block) {
+		int quick_list_class_index = find_class_index_quick_lists(block_size);
+		insert_block_in_quick_list(block, quick_list_class_index);
+	} else {
+		/* update block alloc bit to free */
+		block->header = (block_size | 0 | prev_alloc)^MAGIC;
+		/* update footer with un-alloc bit */
+		block_footer->prev_footer = block->header;
+		/* add block to free list */
+		int free_list_index = find_class_index_free_lists(block_size);
+		insert_block_in_free_list(block, free_list_index);
+		sf_show_heap();
+		/* get next block in heap */
+		sf_block *next_block = (sf_block *)((char *)block + block_size);
+		/* try to coalesce with next first */
+		if(next_block != NULL && (void *)next_block < sf_mem_end()) {
+			coalesce(block, next_block);
+		}
+		/* now try to coalesce with previous (if any) */
+		if(prev_alloc == 0) {
+			/* get previous block in heap */
+			size_t prev_block_size = (block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
+			/* note: &block->prev_footer == block */
+			sf_block *prev_block = (sf_block *)((char *)block - prev_block_size);
+			/* try to coalesce */
+			if(prev_block != NULL && (void *)prev_block > sf_mem_start()) {
+				coalesce(prev_block, block);
+			}
+		}
+	}
+	//sf_show_heap();
     return;
 }
 
