@@ -302,11 +302,11 @@ void *sf_malloc(size_t size) {
 				}
 			}
 		}
-		sf_show_heap();
+		//sf_show_heap();
 		/* return payload bc we dont want to overwrite the header */
 		return block->body.payload;
 	}
-	sf_show_heap();
+	//sf_show_heap();
 	debug("SF_ERRNO: %s\n", strerror(sf_errno));
     return NULL;
 }
@@ -327,7 +327,7 @@ void flush_quick_list(int class_index) {
 			/* delete block from quick list */
 			if(curr_block->body.links.next != NULL) {
 				temp = curr_block;
-				curr_block = curr_block->body.links.next;
+				sf_quick_lists[class_index].first = curr_block->body.links.next;
 			}
 			temp->body.links.next = NULL;
 			/*update list length */
@@ -348,33 +348,35 @@ void flush_quick_list(int class_index) {
 			}
 		}
 	}
-	//sf_show_quick_lists();
 }
 
 void insert_block_in_quick_list(sf_block *block, int class_index) {
 	debug("INSERTING BLOCK INTO QUICK LIST");
+	debug("%d", sf_quick_lists[class_index].length);
 	/* first, try to insert into designated list if capacity hasn't been reached */
 	if(sf_quick_lists[class_index].length < QUICK_LIST_MAX) {
+		debug("CAPACITY NOT REACHED. ADDING BLOCK TO QUICK LIST");
+		sf_block *head = sf_quick_lists[class_index].first;
+		/* create new block */
+		sf_block *new_block = block;
 		/* get head of list */
-		sf_block *head_block = sf_quick_lists[class_index].first;
-		/* if list is empty, set block as new head */
-		if(head_block == NULL) {
-			head_block = block;
-		}
-		/* link (what is to be) new head to old head */
-		block->body.links.next = head_block;
+		new_block->body.links.next = head;
 		/* set passed in block as new head */
-		head_block = block;
+		sf_quick_lists[class_index].first = new_block;
 		/* update list's length */
 		sf_quick_lists[class_index].length++;
 	} else {
+		debug("CAPACITY REACHED. FLUSHING LIST");
 		/* clear full quick list */
 		flush_quick_list(class_index);
 	}
+	debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
+	//sf_show_quick_lists();
 }
 
 void sf_free(void *pp) {
-	debug("FREEING BLOCK");
+	sf_show_heap();
+	debug("\nFREEING BLOCK");
 	/* verify that the pointer being passed in belongs to an allocated block */
 	/* if pointer is NULL, call abort to exit program */
 	if(pp == NULL)
@@ -459,7 +461,7 @@ void sf_free(void *pp) {
 			}
 		}
 	}
-	//sf_show_heap();
+	sf_show_heap();
     return;
 }
 
