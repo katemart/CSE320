@@ -418,9 +418,11 @@ void sf_free(void *pp) {
 		 * so we can read the footer (i.e, block's prev_footer) to check the prev_alloc bit
 		 * note: &block->prev_footer == block
 		 */
-		int prev_block_alloc = (block->prev_footer^MAGIC) & THIS_BLOCK_ALLOCATED;
-		if(prev_block_alloc != 0)
-			abort();
+		 if((void *)(&(block->prev_footer)) > sf_mem_start()) {
+		 	int prev_block_alloc = (block->prev_footer^MAGIC) & THIS_BLOCK_ALLOCATED;
+			if(prev_block_alloc != 0)
+				abort();
+		 }
 	}
 	/* if all of the above conditions pass, proceed to free block */
 	/* first, try to insert at the front of the quick list of the appropriate size */
@@ -444,7 +446,7 @@ void sf_free(void *pp) {
 			coalesce(block, next_block);
 		}
 		/* now try to coalesce with previous (if any) */
-		if(prev_alloc == 0) {
+		if(prev_alloc == 0 && (void *)(&(block->prev_footer)) > sf_mem_start()) {
 			/* get previous block in heap */
 			size_t prev_block_size = (block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
 			/* note: &block->prev_footer == block */
