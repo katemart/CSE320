@@ -302,39 +302,55 @@ void *sf_malloc(size_t size) {
 				}
 			}
 		}
-		//sf_show_heap();
+		sf_show_heap();
 		/* return payload bc we dont want to overwrite the header */
 		return block->body.payload;
 	}
-	//sf_show_heap();
+	sf_show_heap();
 	debug("SF_ERRNO: %s\n", strerror(sf_errno));
     return NULL;
 }
 
 void flush_quick_list(int class_index) {
+	//sf_show_heap();
+	debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 	sf_block *temp = NULL;
 	while(sf_quick_lists[class_index].length > 0) {
+		sf_show_quick_lists();
 		/* get first (aka start of list) */
 		sf_block *curr_block = sf_quick_lists[class_index].first;
 		/* get next block in heap */
 		int block_size = (curr_block->header^MAGIC) & BLOCK_SIZE_MASK;
 		sf_block *next_block = (sf_block *)((char *)curr_block + block_size);
-		/* get previous block in heap */
-		size_t prev_block_size = (curr_block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
-		/* note: &block->prev_footer == block */
-		sf_block *prev_block = (sf_block *)((char *)curr_block - prev_block_size);
+		sf_block *prev_block = NULL;
+		if((void *)(&(curr_block->prev_footer)) > sf_mem_start()) {
+			/* get previous block in heap */
+			size_t prev_block_size = (curr_block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
+			/* note: &block->prev_footer == block */
+			prev_block = (sf_block *)((char *)curr_block - prev_block_size);
+		}
+		/* delete block from quick list */
 		if(curr_block != NULL) {
-			/* delete block from quick list */
+			/* if block's next is not empty, set head to that and delete node
+			 * otherwise, set head to NULL
+			 */
 			if(curr_block->body.links.next != NULL) {
 				temp = curr_block;
 				sf_quick_lists[class_index].first = curr_block->body.links.next;
+				temp->body.links.next = NULL;
+			} else {
+				sf_quick_lists[class_index].first = NULL;
 			}
-			temp->body.links.next = NULL;
+
+			sf_show_quick_lists();
 			/*update list length */
 			sf_quick_lists[class_index].length--;
+			debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 			/* update block alloc bit to free */
 			int prev_alloc = (curr_block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
 			curr_block->header = (block_size | 0 | prev_alloc)^MAGIC;
+			debug("%d", prev_alloc);
+			debug("%lu", ((curr_block->header^MAGIC) & THIS_BLOCK_ALLOCATED));
 			/* add block to free list */
 			int free_list_index = find_class_index_free_lists(block_size);
 			insert_block_in_free_list(curr_block, free_list_index);
@@ -352,7 +368,7 @@ void flush_quick_list(int class_index) {
 
 void insert_block_in_quick_list(sf_block *block, int class_index) {
 	debug("INSERTING BLOCK INTO QUICK LIST");
-	debug("%d", sf_quick_lists[class_index].length);
+	debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 	/* first, try to insert into designated list if capacity hasn't been reached */
 	if(sf_quick_lists[class_index].length < QUICK_LIST_MAX) {
 		debug("CAPACITY NOT REACHED. ADDING BLOCK TO QUICK LIST");
@@ -369,6 +385,13 @@ void insert_block_in_quick_list(sf_block *block, int class_index) {
 		debug("CAPACITY REACHED. FLUSHING LIST");
 		/* clear full quick list */
 		flush_quick_list(class_index);
+		/* insert block into (now) flushed list so that there is only one block in list */
+		sf_block *head = sf_quick_lists[class_index].first;
+		sf_block *new_block = block;
+		new_block->body.links.next = head;
+		sf_quick_lists[class_index].first = new_block;
+		sf_quick_lists[class_index].length++;
+		//sf_show_quick_lists();
 	}
 	debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 	//sf_show_quick_lists();
