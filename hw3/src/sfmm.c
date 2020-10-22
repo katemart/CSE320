@@ -210,6 +210,7 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 
 void *sf_malloc(size_t size) {
 	debug("MAGIC %lu\n", sf_magic());
+	debug("PASSED IN SIZE %lu\n", size);
 	/* if request size is not zero proceed, else return NULL */
 	if(size > 0) {
 		/*
@@ -223,6 +224,14 @@ void *sf_malloc(size_t size) {
 		/* if block size is smaller than 32, set to 32 as minimum */
 		if(alloc_block_size < 32)
 			alloc_block_size = 32;
+		/* if the alloc_block_size is less than the passed in size it could indicate overflow
+		 * if overflow is present, we have a neg num - in which case return NULL and set sf_errno
+		 */
+		if(size > alloc_block_size) {
+			sf_errno = ENOMEM;
+			debug("OVERFLOW!");
+			return NULL;
+		}
 		/* check if sf_malloc is called for the first time, if so "get" space */
 		if(sf_mem_start() == sf_mem_end()) {
 			debug("FIRST CALL SF_MALLOC");
