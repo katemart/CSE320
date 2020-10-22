@@ -470,13 +470,19 @@ void sf_free(void *pp) {
 	/* first, try to insert at the front of the quick list of the appropriate size */
 	int quick_list_max_block = ((NUM_QUICK_LISTS-1)*16) + 32;
 	if(block_size <= quick_list_max_block) {
+		debug("FREE FROM QUICK LISTS");
 		int quick_list_class_index = find_class_index_quick_lists(block_size);
 		insert_block_in_quick_list(block, quick_list_class_index);
 	} else {
+		debug("FREE FROM FREE LISTS");
 		/* update block alloc bit to free */
 		block->header = (block_size | 0 | prev_alloc)^MAGIC;
 		/* update footer with un-alloc bit */
 		block_footer->prev_footer = block->header;
+		/* update next block's header (pal bit) */
+		int next_block_alloc = (block_footer->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+		int next_block_size = (block_footer->header^MAGIC) & BLOCK_SIZE_MASK;
+		block_footer->header = (next_block_size | next_block_alloc | 0)^MAGIC;
 		/* add block to free list */
 		int free_list_index = find_class_index_free_lists(block_size);
 		insert_block_in_free_list(block, free_list_index);
