@@ -243,7 +243,7 @@ Test(sfmm_basecode_suite, realloc_smaller_block_free_block, .timeout = TEST_TIME
 	// This block will go into the main freelist and be coalesced.  Note that we don't put split
         // blocks into the quick lists because their sizes are not sizes that were requested by the
 	// client, so they are not very likely to satisfy a new request.
-	assert_quick_list_block_count(0, 0);	
+	assert_quick_list_block_count(0, 0);
 	assert_free_block_count(0, 1);
 	assert_free_block_count(4048, 1);
 }
@@ -255,3 +255,36 @@ Test(sfmm_basecode_suite, realloc_smaller_block_free_block, .timeout = TEST_TIME
 
 //Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT) {
 //}
+
+Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT) {
+	sf_errno = 0;
+	void *x = sf_malloc(0);
+
+	cr_assert_null(x, "x is not NULL!");
+	cr_assert(sf_errno == 0, "sf_errno is not 0!");
+}
+
+Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT) {
+	sf_errno = 0;
+
+	void *a = sf_malloc(16);
+    void *b = sf_malloc(24);
+	void *c = sf_malloc(8);
+	void *d = sf_malloc(10);
+	void *e = sf_malloc(1);
+    void *f = sf_malloc(20);
+
+    sf_free(a);
+    sf_free(b);
+    sf_free(c);
+	sf_free(d);
+    sf_free(e);
+    sf_free(f);
+
+	assert_quick_list_block_count(0, 1);
+	assert_quick_list_block_count(32, 1);
+	assert_free_block_count(0, 2);
+	assert_free_block_count(160, 1);
+	assert_free_block_count(3888, 1);
+	cr_assert(sf_errno == 0, "sf_errno is not zero!");
+}
