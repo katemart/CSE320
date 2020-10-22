@@ -498,5 +498,79 @@ void sf_free(void *pp) {
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
+	sf_show_heap();
+	debug("\nRE-ALLOCATING BLOCK");
+	/* verify that the pointer being passed in belongs to an allocated block */
+	/* if pointer is NULL, set sf_errno to EINVAL and return NULL */
+	if(pp == NULL) {
+		sf_errno = EINVAL;
+		return NULL;
+	}
+	/* if pointer is NOT 16-byte aligned, set sf_errno to EINVAL and return NULL */
+	if(((unsigned long)pp & 15) != 0) {
+		sf_errno = EINVAL;
+		return NULL;
+	}
+	/* get block
+	 * note: need to do -16 because sf_malloc returns the block's payload, not actual block
+	 */
+	sf_block *block = pp - header_size - footer_size;
+	/* get block size */
+	size_t block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
+	/* if block size is valid, set sf_errno to EINVAL and return NULL */
+	if(block_size < 32) {
+		sf_errno = EINVAL;
+		return NULL;
+	}
+	/* if block size is NOT a multiple of 16, set sf_errno to EINVAL and return NULL */
+	if((block_size % 16) != 0) {
+		sf_errno = EINVAL;
+		return NULL;
+	}
+	/* get block's footer */
+	sf_block *block_footer = (sf_block *)((char *)block + block_size);
+	block_footer->prev_footer = block->header;
+	/* if the header of the block is before the start of first block of the heap OR
+	 * the footer of the block is after the end of the last block in the heap,
+	 * set sf_errno to EINVAL and return NULL
+	 */
+	if((void *)(&(block->header)) < sf_mem_start() || (void *)(block_footer) > sf_mem_end()) {
+		sf_errno = EINVAL;
+		return NULL;
+	}
+	/* get alloc and prev_alloc bits */
+	int alloc = (block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+	int prev_alloc = (block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
+	/* if the allocated bit in the header is 0, set sf_errno to EINVAL and return NULL
+	 * (since we can't "re-allocate" an un-allocated block)
+	 */
+	if(alloc == 0) {
+		sf_errno = EINVAL;
+		return NULL;
+	}
+	/* if the prev_alloc field is zero but the alloc field in the prev block is not zero,
+	 * set sf_errno to EINVAL and return NULL
+	 * (as something must've gone wrong because these fields MUST ALWAYS match)
+	 */
+	if(prev_alloc == 0) {
+		/* if the previous block is not allocated (i.e. it is free), it has a footer
+		 * so we can read the footer (i.e, block's prev_footer) to check the prev_alloc bit
+		 * note: &block->prev_footer == block
+		 */
+		 if((void *)(&(block->prev_footer)) > sf_mem_start()) {
+		 	int prev_block_alloc = (block->prev_footer^MAGIC) & THIS_BLOCK_ALLOCATED;
+			if(prev_block_alloc != 0) {
+				sf_errno = EINVAL;
+				return NULL;
+			}
+		 }
+	}
+	/* if pointer is valid but the size parameter is 0, free the block and return NULL */
+	if(rsize == 0) {
+		sf_free(pp);
+		return NULL;
+	}
+	/* if all of the above conditions pass, proceed to re-alloc block */
+
     return NULL;
 }
