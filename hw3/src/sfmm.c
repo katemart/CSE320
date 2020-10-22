@@ -193,6 +193,10 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 		/* update prev block's footer */
 		sf_block *new_footer = (sf_block *)((char *)prev_block + new_block_size);
 		new_footer->prev_footer = prev_block->header;
+		/* update next block's header (pal bit) */
+		int next_block_alloc = (new_footer->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+		int next_block_size = (new_footer->header^MAGIC) & BLOCK_SIZE_MASK;
+		new_footer->header = (next_block_size | next_block_alloc | prev_block_alloc)^MAGIC;
 		/* insert "big" block into list */
 		int index = find_class_index_free_lists(new_block_size);
 		insert_block_in_free_list(prev_block, index);
@@ -209,8 +213,9 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 }
 
 void *sf_malloc(size_t size) {
-	debug("MAGIC %lu\n", sf_magic());
-	debug("PASSED IN SIZE %lu\n", size);
+	debug("\n\nSF_MALLOC");
+	//debug("MAGIC %lu\n", sf_magic());
+	//debug("PASSED IN SIZE %lu\n", size);
 	/* if request size is not zero proceed, else return NULL */
 	if(size > 0) {
 		/*
@@ -311,11 +316,11 @@ void *sf_malloc(size_t size) {
 				}
 			}
 		}
-		sf_show_heap();
+		//sf_show_heap();
 		/* return payload bc we dont want to overwrite the header */
 		return block->body.payload;
 	}
-	sf_show_heap();
+	//sf_show_heap();
 	debug("SF_ERRNO: %s\n", strerror(sf_errno));
     return NULL;
 }
@@ -325,7 +330,7 @@ void flush_quick_list(int class_index) {
 	debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 	sf_block *temp = NULL;
 	while(sf_quick_lists[class_index].length > 0) {
-		sf_show_quick_lists();
+		//sf_show_quick_lists();
 		/* get first (aka start of list) */
 		sf_block *curr_block = sf_quick_lists[class_index].first;
 		/* get next block in heap */
@@ -350,16 +355,15 @@ void flush_quick_list(int class_index) {
 			} else {
 				sf_quick_lists[class_index].first = NULL;
 			}
-
-			sf_show_quick_lists();
+			//sf_show_quick_lists();
 			/*update list length */
 			sf_quick_lists[class_index].length--;
 			debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 			/* update block alloc bit to free */
 			int prev_alloc = (curr_block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
 			curr_block->header = (block_size | 0 | prev_alloc)^MAGIC;
-			debug("%d", prev_alloc);
-			debug("%lu", ((curr_block->header^MAGIC) & THIS_BLOCK_ALLOCATED));
+			debug("QUICK LIST PREV_ALLOC %d", prev_alloc);
+			debug("QUICK LIST ALLOC %lu", ((curr_block->header^MAGIC) & THIS_BLOCK_ALLOCATED));
 			/* add block to free list */
 			int free_list_index = find_class_index_free_lists(block_size);
 			insert_block_in_free_list(curr_block, free_list_index);
@@ -407,8 +411,8 @@ void insert_block_in_quick_list(sf_block *block, int class_index) {
 }
 
 void sf_free(void *pp) {
-	sf_show_heap();
-	debug("\nFREEING BLOCK");
+	//sf_show_heap();
+	debug("\n\nFREEING BLOCK");
 	/* verify that the pointer being passed in belongs to an allocated block */
 	/* if pointer is NULL, call abort to exit program */
 	if(pp == NULL)
@@ -443,12 +447,14 @@ void sf_free(void *pp) {
 	/* if the allocated bit in the header is 0, call abort to exit program
 	 * (since we can't "free" an un-allocated block)
 	 */
+	debug("ALLOC %d", alloc);
 	if(alloc == 0)
 		abort();
 	/* if the prev_alloc field is zero but the alloc field in the prev block is not zero,
 	 * call abort to exit program
 	 * (as something must've gone wrong because these fields MUST ALWAYS match)
 	 */
+	debug("PREV ALLOC %d", prev_alloc);
 	if(prev_alloc == 0) {
 		/* if the previous block is not allocated (i.e. it is free), it has a footer
 		 * so we can read the footer (i.e, block's prev_footer) to check the prev_alloc bit
@@ -493,7 +499,7 @@ void sf_free(void *pp) {
 			}
 		}
 	}
-	sf_show_heap();
+	//sf_show_heap();
     return;
 }
 
