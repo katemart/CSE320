@@ -256,6 +256,7 @@ Test(sfmm_basecode_suite, realloc_smaller_block_free_block, .timeout = TEST_TIME
 //Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT) {
 //}
 
+/* test sf_malloc with zero */
 Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT) {
 	sf_errno = 0;
 	void *x = sf_malloc(0);
@@ -264,6 +265,16 @@ Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT) {
 	cr_assert(sf_errno == 0, "sf_errno is not 0!");
 }
 
+/* test sf_malloc with negative number */
+Test(sfmm_student_suite, student_test_2, .timeout = TEST_TIMEOUT) {
+	sf_errno = 0;
+	void *x = sf_malloc(-1);
+
+	cr_assert_null(x, "x is not NULL!");
+	cr_assert(sf_errno == ENOMEM, "sf_errno is not ENOMEM!");
+}
+
+/* test sf_free with quick lists + flushing */
 Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT) {
 	sf_errno = 0;
 
