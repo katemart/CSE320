@@ -125,8 +125,11 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	 */
 	if(remainder < 32) {
 		debug("NO SPLIT");
-		block->header = ((block->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
+		sf_block *block_found = (sf_block *)((char *)block + block_size_found);
+		block_found->header = ((block_found->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
 		return block;
+		//block->header = ((block->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
+		//return block;
 	}
 	debug("SPLIT");
 	/*
@@ -627,13 +630,14 @@ void *sf_realloc(void *pp, size_t rsize) {
 		/* re-allocating to a smaller size */
 		debug("RSIZE %lu", rsize);
 		block = attempt_split(block, rsize);
-		debug("B SIZE %lu",  (block->header^MAGIC) & BLOCK_SIZE_MASK);
-		/* coalesce with next block in heap if possible */
 		size_t new_block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
+		debug("B SIZE %lu",  new_block_size);
+		/* coalesce with next block in heap if possible */
 		sf_block *next_block = (sf_block *)((char *)block + new_block_size);
 		if(next_block != NULL && (void *)next_block < sf_mem_end() - header_size) {
 			size_t next_block_size = (next_block->header^MAGIC) & BLOCK_SIZE_MASK;
 			sf_block *next_next_block = (sf_block *)((char *)next_block + next_block_size);
+			debug("CURR %p, NEXT %p, NEXT NEXT %p", block, next_block, next_next_block);
 			if(next_next_block != NULL && (void *)next_next_block < sf_mem_end() - header_size) {
 				debug("COALESCING WITH NEXT");
 				coalesce(next_block, next_next_block);
