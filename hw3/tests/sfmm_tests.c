@@ -360,4 +360,19 @@ Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT) {
 	cr_assert(sf_errno == 0, "sf_errno is not zero!");
 }
 
+/* test sf_free when trying to free already freed block */
+Test(sfmm_student_suite, student_test_6, .timeout = TEST_TIMEOUT, .signal = SIGABRT) {
+	void *x = sf_malloc(sizeof(int) * 200);
+    sf_free(x);
+    sf_free(x);
+}
 
+/* test sf_realloc when equal */
+Test(sfmm_student_suite, student_test_7, .timeout = TEST_TIMEOUT) {
+	void *a = sf_malloc(sizeof(int));
+    void *b = sf_realloc(a, sizeof(int) * 2);
+    void *c = sf_realloc(a, sizeof(int) * 2);
+
+    cr_assert_eq(a, b, "Pointers are not equal! (exp=%p, found=%p)", a, b);
+    cr_assert_eq(a, c, "Pointers are not equal! (exp=%p, found=%p)", a, c);
+}
