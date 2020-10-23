@@ -6,6 +6,14 @@
 #define TEST_TIMEOUT 15
 
 /*
+ * Define WEAK_MAGIC during compilation to use MAGIC of 0x0 for debugging purposes.
+ * Note that this feature will be disabled during grading.
+ */
+#ifdef WEAK_MAGIC
+int sf_weak_magic = 1;
+#endif
+
+/*
  * Assert the total number of free blocks of a specified size.
  * If size == 0, then assert the total number of all free blocks.
  */
@@ -299,3 +307,40 @@ Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT) {
 	assert_free_block_count(3888, 1);
 	cr_assert(sf_errno == 0, "sf_errno is not zero!");
 }
+
+/* test sf_free with quick_lists + flushing (out of order & w/o freeing some) */
+Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT) {
+	sf_errno = 0;
+
+	void *a = sf_malloc(45);
+    void *b = sf_malloc(400);
+    void *c = sf_malloc(45);
+    /* void *d = */ sf_malloc(400);
+    void *e = sf_malloc(45);
+    /* void *f= */ sf_malloc(400);
+    void *g = sf_malloc(45);
+    void *h = sf_malloc(400);
+    void *i = sf_malloc(45);
+    void *j = sf_malloc(400);
+    void *k = sf_malloc(45);
+
+    sf_free(a);
+    sf_free(c);
+    sf_free(e);
+    sf_free(g);
+    sf_free(i);
+    sf_free(h);
+    sf_free(j);
+    sf_free(b);
+    sf_free(k);
+
+    assert_quick_list_block_count(0, 1);
+	assert_quick_list_block_count(64, 1);
+	assert_free_block_count(0, 4);
+	assert_free_block_count(64, 1);
+	assert_free_block_count(544, 1);
+	assert_free_block_count(960, 1);
+	assert_free_block_count(1616, 1);
+	cr_assert(sf_errno == 0, "sf_errno is not zero!");
+}
+
