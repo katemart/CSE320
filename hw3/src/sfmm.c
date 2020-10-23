@@ -618,7 +618,7 @@ void *sf_realloc(void *pp, size_t rsize) {
 		}
 		sf_free(pp);
 		return larger_block;
-	} else if(block_size > rsize) {
+	} else {
 		/* first, align rsize */
 		rsize = rsize + header_size;
 		int remainder = rsize % 16;
@@ -629,6 +629,7 @@ void *sf_realloc(void *pp, size_t rsize) {
 			rsize = 32;
 		/* re-allocating to a smaller size */
 		debug("RSIZE %lu", rsize);
+		/* note: if the blocks are equal, it wont be split and the same block will be returned */
 		block = attempt_split(block, rsize);
 		size_t new_block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
 		debug("B SIZE %lu",  new_block_size);
@@ -644,18 +645,6 @@ void *sf_realloc(void *pp, size_t rsize) {
 			}
 		}
 		return block->body.payload;
-	} else {
-		/* block size and rsize are equal */
-		/* first, align rsize */
-		rsize = rsize + header_size;
-		int remainder = rsize % 16;
-		if(remainder != 0)
-			rsize += 16 - remainder;
-		/* if block size is smaller than 32, set to 32 as minimum */
-		if(rsize < 32)
-			rsize = 32;
-		if(block_size == rsize)
-			return pp;
 	}
     return NULL;
 }
