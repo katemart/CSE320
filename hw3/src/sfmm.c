@@ -156,6 +156,7 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	new_block_footer->prev_footer = new_block->header;
 	/* get index from free list corresponding to block */
 	size_t block_size = (new_block->header^MAGIC) & BLOCK_SIZE_MASK;
+	debug("BLOCK SIZE SPLIT %lu", (block->header^MAGIC) & BLOCK_SIZE_MASK);
 	int class_index = find_class_index_free_lists(block_size);
 	debug("INDEX %d", class_index);
 	/* insert "remainder" block into main free lists" */
@@ -189,18 +190,21 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 		/* get size of new block */
 		size_t new_block_size = (prev_block_size + curr_block_size);
 		/* update prev block's header */
-		prev_block->header = (new_block_size | prev_block_alloc)^MAGIC;
+		int prev_block_prev_alloc = (prev_block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
+		prev_block->header = (new_block_size | prev_block_prev_alloc)^MAGIC;
 		/* update prev block's footer */
-		sf_block *new_footer = (sf_block *)((char *)prev_block + new_block_size);
-		new_footer->prev_footer = prev_block->header;
+		sf_block *next_block = (sf_block *)((char *)prev_block + new_block_size);
+		next_block->prev_footer = prev_block->header;
 		/* update next block's header (pal bit) */
-		int next_block_alloc = (new_footer->header^MAGIC) & THIS_BLOCK_ALLOCATED;
-		int next_block_size = (new_footer->header^MAGIC) & BLOCK_SIZE_MASK;
-		new_footer->header = (next_block_size | next_block_alloc | prev_block_alloc)^MAGIC;
+		if((void *)(&(next_block->header)) < sf_mem_end() - header_size) {
+			int curr_alloc = (prev_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+			int next_block_alloc = (next_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+			int next_block_size = (next_block->header^MAGIC) & BLOCK_SIZE_MASK;
+			next_block->header = (next_block_size | next_block_alloc | curr_alloc)^MAGIC;
+		}
 		/* insert "big" block into list */
 		int index = find_class_index_free_lists(new_block_size);
 		insert_block_in_free_list(prev_block, index);
-		//sf_show_free_lists();
 	}
 	/* use coalesce var to set "last block" in heap accordingly */
 	if(prev_block == last_block && !coalesce) {
@@ -214,8 +218,6 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 
 void *sf_malloc(size_t size) {
 	debug("\n\nSF_MALLOC");
-	//debug("MAGIC %lu\n", sf_magic());
-	//debug("PASSED IN SIZE %lu\n", size);
 	/* if request size is not zero proceed, else return NULL */
 	if(size > 0) {
 		/*
@@ -330,18 +332,20 @@ void flush_quick_list(int class_index) {
 	debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 	sf_block *temp = NULL;
 	while(sf_quick_lists[class_index].length > 0) {
-		//sf_show_quick_lists();
 		/* get first (aka start of list) */
 		sf_block *curr_block = sf_quick_lists[class_index].first;
 		/* get next block in heap */
 		int block_size = (curr_block->header^MAGIC) & BLOCK_SIZE_MASK;
 		sf_block *next_block = (sf_block *)((char *)curr_block + block_size);
 		sf_block *prev_block = NULL;
-		if((void *)(&(curr_block->prev_footer)) > sf_mem_start()) {
-			/* get previous block in heap */
-			size_t prev_block_size = (curr_block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
-			/* note: &block->prev_footer == block */
-			prev_block = (sf_block *)((char *)curr_block - prev_block_size);
+		int prev_alloc = (curr_block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
+		if(prev_alloc == 0) {
+			if((void *)(&(curr_block->prev_footer)) > sf_mem_start()) {
+				/* get previous block in heap */
+				size_t prev_block_size = (curr_block->prev_footer^MAGIC) & BLOCK_SIZE_MASK;
+				/* note: &block->prev_footer == block */
+				prev_block = (sf_block *)((char *)curr_block - prev_block_size);
+			}
 		}
 		/* delete block from quick list */
 		if(curr_block != NULL) {
@@ -355,24 +359,35 @@ void flush_quick_list(int class_index) {
 			} else {
 				sf_quick_lists[class_index].first = NULL;
 			}
-			//sf_show_quick_lists();
 			/*update list length */
 			sf_quick_lists[class_index].length--;
 			debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 			/* update block alloc bit to free */
-			int prev_alloc = (curr_block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
 			curr_block->header = (block_size | 0 | prev_alloc)^MAGIC;
+			/* update footer */
+			next_block->prev_footer = curr_block->header;
+			/* update next block's header (pal bit) */
+			if((void *)(&(next_block->header)) < sf_mem_end() - header_size) {
+				int curr_alloc = (curr_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+				int next_block_alloc = (next_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+				int next_block_size = (next_block->header^MAGIC) & BLOCK_SIZE_MASK;
+				next_block->header = (next_block_size | next_block_alloc | curr_alloc)^MAGIC;
+			}
+			/* worthless to update footer, since if it is a free block it'll be coalesced anyways */
 			debug("QUICK LIST PREV_ALLOC %d", prev_alloc);
 			debug("QUICK LIST ALLOC %lu", ((curr_block->header^MAGIC) & THIS_BLOCK_ALLOCATED));
 			/* add block to free list */
 			int free_list_index = find_class_index_free_lists(block_size);
 			insert_block_in_free_list(curr_block, free_list_index);
 			/* try to coalesce with next first */
-			if(next_block != NULL && (void *)next_block < sf_mem_end()) {
+			if(next_block != NULL && (void *)next_block < sf_mem_end() - header_size) {
+				debug("COALESCING WITH NEXT");
 				coalesce(curr_block, next_block);
 			}
+			//debug("IS PREV NULL %d", prev_block==NULL);
 			/* now try to coalesce with previous */
 			if(prev_block != NULL && (void *)prev_block > sf_mem_start()) {
+				debug("COALESCING WITH PREVIOUS");
 				coalesce(prev_block, curr_block);
 			}
 		}
@@ -404,10 +419,8 @@ void insert_block_in_quick_list(sf_block *block, int class_index) {
 		new_block->body.links.next = head;
 		sf_quick_lists[class_index].first = new_block;
 		sf_quick_lists[class_index].length++;
-		//sf_show_quick_lists();
 	}
 	debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
-	//sf_show_quick_lists();
 }
 
 void sf_free(void *pp) {
@@ -426,6 +439,7 @@ void sf_free(void *pp) {
 	sf_block *block = pp - header_size - footer_size;
 	/* get block size */
 	size_t block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
+	debug("%lu", block_size);
 	/* if block size is valid, if not call abort to exit program */
 	if(block_size < 32)
 		abort();
@@ -447,14 +461,14 @@ void sf_free(void *pp) {
 	/* if the allocated bit in the header is 0, call abort to exit program
 	 * (since we can't "free" an un-allocated block)
 	 */
-	debug("ALLOC %d", alloc);
+	//debug("ALLOC %d", alloc);
 	if(alloc == 0)
 		abort();
 	/* if the prev_alloc field is zero but the alloc field in the prev block is not zero,
 	 * call abort to exit program
 	 * (as something must've gone wrong because these fields MUST ALWAYS match)
 	 */
-	debug("PREV ALLOC %d", prev_alloc);
+	//debug("PREV ALLOC %d", prev_alloc);
 	if(prev_alloc == 0) {
 		/* if the previous block is not allocated (i.e. it is free), it has a footer
 		 * so we can read the footer (i.e, block's prev_footer) to check the prev_alloc bit
@@ -476,21 +490,27 @@ void sf_free(void *pp) {
 	} else {
 		debug("FREE FROM FREE LISTS");
 		/* update block alloc bit to free */
+		//debug("%lu", block->header^MAGIC);
 		block->header = (block_size | 0 | prev_alloc)^MAGIC;
+		//debug("NEW HEADER %lu", block->header^MAGIC);
 		/* update footer with un-alloc bit */
 		block_footer->prev_footer = block->header;
 		/* update next block's header (pal bit) */
-		int next_block_alloc = (block_footer->header^MAGIC) & THIS_BLOCK_ALLOCATED;
-		int next_block_size = (block_footer->header^MAGIC) & BLOCK_SIZE_MASK;
-		block_footer->header = (next_block_size | next_block_alloc | 0)^MAGIC;
+		if((void *)(&(block_footer->header)) < sf_mem_end() - header_size) {
+			int curr_alloc = (block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+			debug("CURR_ALLOC %d", curr_alloc);
+			int next_block_alloc = (block_footer->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+			int next_block_size = (block_footer->header^MAGIC) & BLOCK_SIZE_MASK;
+			block_footer->header = (next_block_size | next_block_alloc | curr_alloc)^MAGIC;
+		}
 		/* add block to free list */
 		int free_list_index = find_class_index_free_lists(block_size);
 		insert_block_in_free_list(block, free_list_index);
-		sf_show_heap();
 		/* get next block in heap */
 		sf_block *next_block = (sf_block *)((char *)block + block_size);
 		/* try to coalesce with next first */
-		if(next_block != NULL && (void *)next_block < sf_mem_end()) {
+		if(next_block != NULL && (void *)next_block < sf_mem_end() - header_size) {
+			debug("COALESCING WITH NEXT");
 			coalesce(block, next_block);
 		}
 		/* now try to coalesce with previous (if any) */
@@ -501,16 +521,17 @@ void sf_free(void *pp) {
 			sf_block *prev_block = (sf_block *)((char *)block - prev_block_size);
 			/* try to coalesce */
 			if(prev_block != NULL && (void *)prev_block > sf_mem_start()) {
+				debug("COALESCING WITH PREVIOUS");
 				coalesce(prev_block, block);
 			}
 		}
 	}
-	//sf_show_heap();
+	sf_show_heap();
     return;
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
-	sf_show_heap();
+	//sf_show_heap();
 	debug("\nRE-ALLOCATING BLOCK");
 	/* verify that the pointer being passed in belongs to an allocated block */
 	/* if pointer is NULL, set sf_errno to EINVAL and return NULL */
@@ -583,6 +604,26 @@ void *sf_realloc(void *pp, size_t rsize) {
 		return NULL;
 	}
 	/* if all of the above conditions pass, proceed to re-alloc block */
-
+	/* re-allocating to a larger size */
+	if(block_size < rsize) {
+		void *larger_block = sf_malloc(rsize);
+		if(larger_block != NULL) {
+			memcpy(larger_block, block->body.payload, (block_size - header_size));
+		}
+		sf_free(pp);
+		return larger_block;
+	} else if(block_size > rsize) {
+		/* re-allocating to a smaller size */
+		rsize = rsize + header_size;
+		int remainder = rsize % 16;
+		if(remainder != 0)
+			rsize += 16 - remainder;
+		block = attempt_split(block, rsize);
+		debug("B SIZE %lu",  (block->header^MAGIC) & BLOCK_SIZE_MASK);
+		return block->body.payload;
+	} else {
+		/* block size and rsize are equal */
+		return pp;
+	}
     return NULL;
 }
