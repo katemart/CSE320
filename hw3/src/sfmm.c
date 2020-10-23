@@ -314,7 +314,7 @@ void *sf_malloc(size_t size) {
 					(block->body.links.prev)->body.links.next = block->body.links.next;
 					(block->body.links.next)->body.links.prev = block->body.links.prev;
 					block = attempt_split(last_block, alloc_block_size);
-					break;
+					return block->body.payload;
 				}
 			}
 		}
@@ -425,6 +425,7 @@ void insert_block_in_quick_list(sf_block *block, int class_index) {
 
 void sf_free(void *pp) {
 	//sf_show_heap();
+
 	debug("\n\nFREEING BLOCK");
 	/* verify that the pointer being passed in belongs to an allocated block */
 	/* if pointer is NULL, call abort to exit program */
@@ -436,6 +437,7 @@ void sf_free(void *pp) {
 	/* get block
 	 * note: need to do -16 because sf_malloc returns the block's payload, not actual block
 	 */
+	debug("%p", pp);
 	sf_block *block = pp - header_size - footer_size;
 	/* get block size */
 	size_t block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
@@ -526,23 +528,24 @@ void sf_free(void *pp) {
 			}
 		}
 	}
-	sf_show_heap();
+	//sf_show_heap();
     return;
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
+	debug("%p", pp);
 	//sf_show_heap();
 	debug("\nRE-ALLOCATING BLOCK");
 	/* verify that the pointer being passed in belongs to an allocated block */
-	/* if pointer is NULL, set sf_errno to EINVAL and return NULL */
+	/* if pointer is NULL, call abort to exit program */
 	if(pp == NULL) {
 		sf_errno = EINVAL;
-		return NULL;
+		abort();
 	}
-	/* if pointer is NOT 16-byte aligned, set sf_errno to EINVAL and return NULL */
+	/* if pointer is NOT 16-byte aligned, set sf_errno to EINVAL and call abort to exit program */
 	if(((unsigned long)pp & 15) != 0) {
 		sf_errno = EINVAL;
-		return NULL;
+		abort();
 	}
 	/* get block
 	 * note: need to do -16 because sf_malloc returns the block's payload, not actual block
@@ -550,39 +553,39 @@ void *sf_realloc(void *pp, size_t rsize) {
 	sf_block *block = pp - header_size - footer_size;
 	/* get block size */
 	size_t block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
-	/* if block size is valid, set sf_errno to EINVAL and return NULL */
+	/* if block size is valid, set sf_errno to EINVAL and call abort to exit program */
 	if(block_size < 32) {
 		sf_errno = EINVAL;
-		return NULL;
+		abort();
 	}
-	/* if block size is NOT a multiple of 16, set sf_errno to EINVAL and return NULL */
+	/* if block size is NOT a multiple of 16, set sf_errno to EINVAL and call abort to exit program */
 	if((block_size % 16) != 0) {
 		sf_errno = EINVAL;
-		return NULL;
+		abort();
 	}
 	/* get block's footer */
 	sf_block *block_footer = (sf_block *)((char *)block + block_size);
 	block_footer->prev_footer = block->header;
 	/* if the header of the block is before the start of first block of the heap OR
 	 * the footer of the block is after the end of the last block in the heap,
-	 * set sf_errno to EINVAL and return NULL
+	 * set sf_errno to EINVAL and call abort to exit program
 	 */
 	if((void *)(&(block->header)) < sf_mem_start() || (void *)(block_footer) > sf_mem_end()) {
 		sf_errno = EINVAL;
-		return NULL;
+		abort();
 	}
 	/* get alloc and prev_alloc bits */
 	int alloc = (block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 	int prev_alloc = (block->header^MAGIC) & PREV_BLOCK_ALLOCATED;
-	/* if the allocated bit in the header is 0, set sf_errno to EINVAL and return NULL
+	/* if the allocated bit in the header is 0, set sf_errno to EINVAL and call abort to exit program
 	 * (since we can't "re-allocate" an un-allocated block)
 	 */
 	if(alloc == 0) {
 		sf_errno = EINVAL;
-		return NULL;
+		abort();
 	}
 	/* if the prev_alloc field is zero but the alloc field in the prev block is not zero,
-	 * set sf_errno to EINVAL and return NULL
+	 * set sf_errno to EINVAL and call abort to exit program
 	 * (as something must've gone wrong because these fields MUST ALWAYS match)
 	 */
 	if(prev_alloc == 0) {
@@ -594,7 +597,7 @@ void *sf_realloc(void *pp, size_t rsize) {
 		 	int prev_block_alloc = (block->prev_footer^MAGIC) & THIS_BLOCK_ALLOCATED;
 			if(prev_block_alloc != 0) {
 				sf_errno = EINVAL;
-				return NULL;
+				abort();
 			}
 		 }
 	}
@@ -613,17 +616,42 @@ void *sf_realloc(void *pp, size_t rsize) {
 		sf_free(pp);
 		return larger_block;
 	} else if(block_size > rsize) {
-		/* re-allocating to a smaller size */
+		/* first, align rsize */
 		rsize = rsize + header_size;
 		int remainder = rsize % 16;
 		if(remainder != 0)
 			rsize += 16 - remainder;
+		/* if block size is smaller than 32, set to 32 as minimum */
+		if(rsize < 32)
+			rsize = 32;
+		/* re-allocating to a smaller size */
+		debug("RSIZE %lu", rsize);
 		block = attempt_split(block, rsize);
 		debug("B SIZE %lu",  (block->header^MAGIC) & BLOCK_SIZE_MASK);
+		/* coalesce with next block in heap if possible */
+		size_t new_block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
+		sf_block *next_block = (sf_block *)((char *)block + new_block_size);
+		if(next_block != NULL && (void *)next_block < sf_mem_end() - header_size) {
+			size_t next_block_size = (next_block->header^MAGIC) & BLOCK_SIZE_MASK;
+			sf_block *next_next_block = (sf_block *)((char *)next_block + next_block_size);
+			if(next_next_block != NULL && (void *)next_next_block < sf_mem_end() - header_size) {
+				debug("COALESCING WITH NEXT");
+				coalesce(next_block, next_next_block);
+			}
+		}
 		return block->body.payload;
 	} else {
 		/* block size and rsize are equal */
-		return pp;
+		/* first, align rsize */
+		rsize = rsize + header_size;
+		int remainder = rsize % 16;
+		if(remainder != 0)
+			rsize += 16 - remainder;
+		/* if block size is smaller than 32, set to 32 as minimum */
+		if(rsize < 32)
+			rsize = 32;
+		if(block_size == rsize)
+			return pp;
 	}
     return NULL;
 }
