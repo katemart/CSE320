@@ -344,3 +344,20 @@ Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT) {
 	cr_assert(sf_errno == 0, "sf_errno is not zero!");
 }
 
+/* test sf_malloc, sf_free, and sf_realloc together */
+Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT) {
+	sf_errno = 0;
+
+	void *a = sf_malloc(4096);
+    sf_free(a);
+    sf_malloc(sizeof(long double)*125);
+	void *b = sf_malloc(sizeof(float)*16);
+    sf_realloc(b, 30);
+
+    assert_quick_list_block_count(0, 0);
+	assert_free_block_count(0, 1);
+	assert_free_block_count(6112, 1);
+	cr_assert(sf_errno == 0, "sf_errno is not zero!");
+}
+
+
