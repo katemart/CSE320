@@ -376,3 +376,11 @@ Test(sfmm_student_suite, student_test_7, .timeout = TEST_TIMEOUT) {
     cr_assert_eq(a, b, "Pointers are not equal! (exp=%p, found=%p)", a, b);
     cr_assert_eq(a, c, "Pointers are not equal! (exp=%p, found=%p)", a, c);
 }
+
+/* test sf_realloc when zero */
+Test(sfmm_student_suite, student_test_8, .timeout = TEST_TIMEOUT) {
+	void *a = sf_malloc(sizeof(int));
+    void *b = sf_realloc(a, 0);
+
+    cr_assert_null(b, "b is not NULL!");
+}
