@@ -165,7 +165,8 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	/* insert "remainder" block into main free lists" */
 	insert_block_in_free_list(new_block, class_index);
 	/* set last block to be this free block */
-	last_block = block;
+	if(block == last_block)
+		last_block = new_block;
 	return block;
 }
 
@@ -624,13 +625,24 @@ void *sf_realloc(void *pp, size_t rsize) {
 		block = attempt_split(block, rsize);
 		size_t new_block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
 		debug("B SIZE %lu",  new_block_size);
+		if(new_block_size == block_size)
+			return block->body.payload;
 		/* coalesce with next block in heap if possible */
 		sf_block *next_block = (sf_block *)((char *)block + new_block_size);
+		int next_block_alloc = (next_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 		if(next_block != NULL && (void *)next_block < sf_mem_end() - header_size) {
 			size_t next_block_size = (next_block->header^MAGIC) & BLOCK_SIZE_MASK;
 			sf_block *next_next_block = (sf_block *)((char *)next_block + next_block_size);
-			debug("CURR %p, NEXT %p, NEXT NEXT %p", block, next_block, next_next_block);
+			size_t next_next_block_size = (next_next_block->header^MAGIC) & BLOCK_SIZE_MASK;
 			if(next_next_block != NULL && (void *)next_next_block < sf_mem_end() - header_size) {
+				int next_next_block_alloc = (next_next_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+				int new_prev = next_block_alloc ? PREV_BLOCK_ALLOCATED : 0;
+				next_next_block->header = (next_next_block_size | next_next_block_alloc | new_prev)^MAGIC;
+				debug("%p, %p, %p", next_next_block, last_block, sf_mem_end());
+				if(next_next_block_alloc == 0) {
+					sf_block *third_next = (sf_block *)((char *)next_next_block + next_next_block_size);
+					third_next->prev_footer = next_next_block->header;
+				}
 				debug("COALESCING WITH NEXT");
 				coalesce(next_block, next_next_block);
 			}
