@@ -305,6 +305,8 @@ Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT) {
 	assert_free_block_count(0, 2);
 	assert_free_block_count(160, 1);
 	assert_free_block_count(3888, 1);
+	assert_free_list_size(3, 1);
+	assert_free_list_size(7, 1);
 	cr_assert(sf_errno == 0, "sf_errno is not zero!");
 }
 
@@ -341,6 +343,9 @@ Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT) {
 	assert_free_block_count(544, 1);
 	assert_free_block_count(960, 1);
 	assert_free_block_count(1616, 1);
+	assert_free_list_size(1, 1);
+	assert_free_list_size(5, 2);
+	assert_free_list_size(6, 1);
 	cr_assert(sf_errno == 0, "sf_errno is not zero!");
 }
 
@@ -357,6 +362,7 @@ Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT) {
     assert_quick_list_block_count(0, 0);
 	assert_free_block_count(0, 1);
 	assert_free_block_count(6112, 1);
+	assert_free_list_size(8, 1);
 	cr_assert(sf_errno == 0, "sf_errno is not zero!");
 }
 
@@ -373,6 +379,9 @@ Test(sfmm_student_suite, student_test_7, .timeout = TEST_TIMEOUT) {
     void *b = sf_realloc(a, sizeof(int) * 2);
     void *c = sf_realloc(a, sizeof(int) * 2);
 
+    assert_free_block_count(0, 1);
+	assert_free_block_count(4048, 1);
+	assert_free_list_size(7, 1);
     cr_assert_eq(a, b, "Pointers are not equal! (exp=%p, found=%p)", a, b);
     cr_assert_eq(a, c, "Pointers are not equal! (exp=%p, found=%p)", a, c);
 }
@@ -382,5 +391,8 @@ Test(sfmm_student_suite, student_test_8, .timeout = TEST_TIMEOUT) {
 	void *a = sf_malloc(sizeof(int));
     void *b = sf_realloc(a, 0);
 
+    assert_free_block_count(0, 1);
+	assert_free_block_count(4048, 1);
+	assert_free_list_size(7, 1);
     cr_assert_null(b, "b is not NULL!");
 }
