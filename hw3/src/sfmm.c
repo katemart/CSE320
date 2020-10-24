@@ -128,8 +128,8 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 		sf_block *block_found = (sf_block *)((char *)block + block_size_found);
 		block_found->header = ((block_found->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
 		return block;
-		//block->header = ((block->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
-		//return block;
+		/* block->header = ((block->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
+		   return block; */
 	}
 	debug("SPLIT");
 	/*
@@ -220,7 +220,7 @@ void coalesce(sf_block *prev_block, sf_block *curr_block) {
 }
 
 void *sf_malloc(size_t size) {
-	debug("\n\nSF_MALLOC");
+	debug("\n\nSF_MALLOC\n");
 	/* if request size is not zero proceed, else return NULL */
 	if(size > 0) {
 		/*
@@ -321,7 +321,6 @@ void *sf_malloc(size_t size) {
 				}
 			}
 		}
-		//sf_show_heap();
 		/* return payload bc we dont want to overwrite the header */
 		return block->body.payload;
 	}
@@ -331,7 +330,6 @@ void *sf_malloc(size_t size) {
 }
 
 void flush_quick_list(int class_index) {
-	//sf_show_heap();
 	debug("QUICK LIST LENGTH %d", sf_quick_lists[class_index].length);
 	sf_block *temp = NULL;
 	while(sf_quick_lists[class_index].length > 0) {
@@ -387,7 +385,6 @@ void flush_quick_list(int class_index) {
 				debug("COALESCING WITH NEXT");
 				coalesce(curr_block, next_block);
 			}
-			//debug("IS PREV NULL %d", prev_block==NULL);
 			/* now try to coalesce with previous */
 			if(prev_block != NULL && (void *)prev_block > sf_mem_start()) {
 				debug("COALESCING WITH PREVIOUS");
@@ -427,9 +424,8 @@ void insert_block_in_quick_list(sf_block *block, int class_index) {
 }
 
 void sf_free(void *pp) {
+	debug("\n\nFREEING BLOCK\n");
 	//sf_show_heap();
-
-	debug("\n\nFREEING BLOCK");
 	/* verify that the pointer being passed in belongs to an allocated block */
 	/* if pointer is NULL, call abort to exit program */
 	if(pp == NULL)
@@ -466,14 +462,12 @@ void sf_free(void *pp) {
 	/* if the allocated bit in the header is 0, call abort to exit program
 	 * (since we can't "free" an un-allocated block)
 	 */
-	//debug("ALLOC %d", alloc);
 	if(alloc == 0)
 		abort();
 	/* if the prev_alloc field is zero but the alloc field in the prev block is not zero,
 	 * call abort to exit program
 	 * (as something must've gone wrong because these fields MUST ALWAYS match)
 	 */
-	//debug("PREV ALLOC %d", prev_alloc);
 	if(prev_alloc == 0) {
 		/* if the previous block is not allocated (i.e. it is free), it has a footer
 		 * so we can read the footer (i.e, block's prev_footer) to check the prev_alloc bit
@@ -495,9 +489,7 @@ void sf_free(void *pp) {
 	} else {
 		debug("FREE FROM FREE LISTS");
 		/* update block alloc bit to free */
-		//debug("%lu", block->header^MAGIC);
 		block->header = (block_size | 0 | prev_alloc)^MAGIC;
-		//debug("NEW HEADER %lu", block->header^MAGIC);
 		/* update footer with un-alloc bit */
 		block_footer->prev_footer = block->header;
 		/* update next block's header (pal bit) */
@@ -536,9 +528,8 @@ void sf_free(void *pp) {
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
-	debug("%p", pp);
+	debug("\nRE-ALLOCATING BLOCK\n");
 	//sf_show_heap();
-	debug("\nRE-ALLOCATING BLOCK");
 	/* verify that the pointer being passed in belongs to an allocated block */
 	/* if pointer is NULL, call abort to exit program */
 	if(pp == NULL) {
@@ -646,5 +637,4 @@ void *sf_realloc(void *pp, size_t rsize) {
 		}
 		return block->body.payload;
 	}
-    return NULL;
 }
