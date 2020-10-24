@@ -125,11 +125,8 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	 */
 	if(remainder < 32) {
 		debug("NO SPLIT");
-		sf_block *block_found = (sf_block *)((char *)block + block_size_found);
-		block_found->header = ((block_found->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
+		block->header = ((block->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
 		return block;
-		/* block->header = ((block->header^MAGIC) | THIS_BLOCK_ALLOCATED)^MAGIC;
-		   return block; */
 	}
 	debug("SPLIT");
 	/*
@@ -164,7 +161,7 @@ void *attempt_split(sf_block *block, size_t block_size_needed) {
 	debug("INDEX %d", class_index);
 	/* insert "remainder" block into main free lists" */
 	insert_block_in_free_list(new_block, class_index);
-	/* set last block to be this free block */
+	/* set last block to be new_block block */
 	if(block == last_block)
 		last_block = new_block;
 	return block;
@@ -625,21 +622,31 @@ void *sf_realloc(void *pp, size_t rsize) {
 		block = attempt_split(block, rsize);
 		size_t new_block_size = (block->header^MAGIC) & BLOCK_SIZE_MASK;
 		debug("B SIZE %lu",  new_block_size);
+		/* if splitting is not possible, return block's payload as is*/
 		if(new_block_size == block_size)
 			return block->body.payload;
 		/* coalesce with next block in heap if possible */
+		/* get next block from current */
 		sf_block *next_block = (sf_block *)((char *)block + new_block_size);
 		int next_block_alloc = (next_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
+		/* check that not empty */
 		if(next_block != NULL && (void *)next_block < sf_mem_end() - header_size) {
+			/* get next block's size */
 			size_t next_block_size = (next_block->header^MAGIC) & BLOCK_SIZE_MASK;
+			/* get next block after that (ie, second from current) */
 			sf_block *next_next_block = (sf_block *)((char *)next_block + next_block_size);
+			/* get next next's block size */
 			size_t next_next_block_size = (next_next_block->header^MAGIC) & BLOCK_SIZE_MASK;
+			/* check that not empty */
 			if(next_next_block != NULL && (void *)next_next_block < sf_mem_end() - header_size) {
+				/* get the alloc bit for next next block */
 				int next_next_block_alloc = (next_next_block->header^MAGIC) & THIS_BLOCK_ALLOCATED;
 				int new_prev = next_block_alloc ? PREV_BLOCK_ALLOCATED : 0;
+				/* update header accordingly */
 				next_next_block->header = (next_next_block_size | next_next_block_alloc | new_prev)^MAGIC;
 				debug("%p, %p, %p", next_next_block, last_block, sf_mem_end());
 				if(next_next_block_alloc == 0) {
+					/* get next block after this block (ie, third from current) */
 					sf_block *third_next = (sf_block *)((char *)next_next_block + next_next_block_size);
 					third_next->prev_footer = next_next_block->header;
 				}
