@@ -24,10 +24,13 @@ typedef struct sf_daemon {
 	char *status;
 } sf_daemon;
 
-char *get_quot_field(char *s) {
+/* create a (singly) linked list of daemons */
+
+
+char *get_quot_field(char *orig_str, char **new_ptr) {
 	char *start_mark, *end_mark;
 	/* deal with quotation marks */
-	if((start_mark = strchr(s, '\''))) {
+	if((start_mark = strchr(orig_str, '\''))) {
 		/* get first char after quotation mark */
 		start_mark++;
 		/* get next quotation mark */
@@ -38,6 +41,8 @@ char *get_quot_field(char *s) {
 		if(!end_mark) {
 			end_mark = strchr(start_mark, '\n');
 		}
+		/* set pointer (for str after last quot mark) */
+		*new_ptr = end_mark + 1;
 		/* get string within marks */
 		int str_size = end_mark - start_mark;
 		char *quot_string = malloc(str_size + 1);
@@ -51,9 +56,6 @@ char *get_quot_field(char *s) {
 void run_cli(FILE *in, FILE *out)
 {
     // TO BE IMPLEMENTED
-    /* create an array to hold args */
-    //int max_size = 5;
-    //char **args_arr = malloc(max_size * sizeof(char *));
     /* print out prompt */
 	fprintf(out, "legion>");
 	/* flush buffer
@@ -68,21 +70,45 @@ void run_cli(FILE *in, FILE *out)
 	char *linebuf = NULL;
 	/* iterate through args while NOT EOF */
 	while((linelen = getline(&linebuf, &len, in)) != EOF) {
-		/* -- help -- */
+		int count = 0;
 		/* use strtok to get "first" arg */
-		if(strcmp(strtok(linebuf, " "), "help") == 0 ) {
+		char *copy = strdup(linebuf);
+  		char *first_arg = strtok(copy, " \n");
+  		/* get leftover args (after first) */
+  		char *leftover_args = strpbrk(linebuf, " \'");
+		/* -- help -- */
+		if(strcmp(first_arg, "help") == 0 ) {
 			fprintf(out, help_menu);
 		}
 		/* -- quit -- */
-		else if(strcmp(strtok(linebuf, " "), "quit") == 0) {
+		else if(strcmp(first_arg, "quit") == 0) {
 			sf_fini();
 			exit(0);
 		}
 		/* -- status -- */
-		else if(strcmp(linebuf, "status") == 0) {
-
-			fprintf(out, "we are inside status");
+		else if(strcmp(first_arg, "status") == 0) {
+			char *name, *new_str, *new_ptr = NULL;
+			if((name = get_quot_field(leftover_args, &new_ptr))) {
+				count++;
+				strcpy(leftover_args, new_ptr);
+			} else {
+				new_str = strtok(leftover_args, " ");
+				if(new_str != NULL) {
+					while(new_str) {
+						name = new_str;
+						new_str = strtok(NULL, " ");
+						count++;
+					}
+				}
+			}
+			if(count == 1) {
+				fprintf(out, "%s", name);
+			} else {
+				fprintf(out, "Wrong number of args (given: 2, required: 1) for command 'status'\n");
+			}
+			//goto PROMPT;
 		}
+		//PROMPT:
 		/* print out prompt again every time after a field has been given */
 		fprintf(out, "legion>");
 		/* flush buffer again */
