@@ -2,9 +2,9 @@
  * Legion: Command-line interface
  */
 
-#include "legion.h"
 #include <stdio.h>
 #include <string.h>
+#include "daemon_list.h"
 
 #define prompt "legion>"
 #define help_message "Available commands:\n" \
@@ -17,18 +17,6 @@
 "start (1 args) Start a daemon\n" \
 "stop (1 args) Stop a daemon\n" \
 "logrotate (1 args) Rotate log files for a daemon\n"
-
-
-/* create a structure for each daemon */
-typedef struct sf_daemon {
-	char *name;
-	int pid;
-	char *status;
-	char *command;
-} sf_daemon;
-
-/* create a (singly) linked list of daemons */
-
 
 /* function to parse input line args */
 void parse_args(char ***args_arr, int *arr_len, FILE *out) {
@@ -52,7 +40,7 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
   		exit(0);
   	}
   	/* var to point to delim str */
-  	char *str;
+  	char *str = NULL;
 	/* ptr to traverse args_arr */
 	char arr[linelen];
 	char *arrbuf = arr;
@@ -97,10 +85,19 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 		}
 	}
 	(*args_arr)[args] = NULL;
+	/* free getline buffer */
+	free(linebuf);
 	/* get actual arr len */
 	*arr_len = args;
 }
 
+/* function to free mem in array */
+void free_arr_mem(char **arr, int arr_len) {
+	for(int i = 0; i < arr_len; i++) {
+		free(arr[i]);
+	}
+	free(arr);
+}
 
 void run_cli(FILE *in, FILE *out)
 {
@@ -124,8 +121,10 @@ void run_cli(FILE *in, FILE *out)
 	  	if(arr_len == 0) {
 	  		sf_error("command execution");
 	  		fprintf(out, "Command must be specified.\n");
+	  		free_arr_mem(args_arr, arr_len);
 	  		continue;
 	  	}
+	  	//fprintf(out, "%d\n", arr_len);
 	  	/* if not empty, continue to validate args */
 	  	char *first_arg = args_arr[0];
 	  	/* -- help -- */
@@ -133,15 +132,39 @@ void run_cli(FILE *in, FILE *out)
   			fprintf(out, "%s", help_message);
   		/* -- quit -- */
   		else if(strcmp(first_arg, "quit") == 0) {
-			sf_fini();
-			exit(0);
+			break;
 		}
+		/* -- register -- */
+		else if(strcmp(first_arg, "register") == 0) {
+			/* check that num of args is two or more (+1 for first_arg) */
+			if(arr_len < 3) {
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			/* if so, create daemon */
+			D_STRUCT *d = malloc(sizeof(D_STRUCT));
+			if(d == NULL) {
+				return;
+			}
+			d->name = args_arr[1];
+			d->command = args_arr[2];
+			d->status = 1;
+			/* call register event function */
+			sf_register(d->name, d->command);
+		}
+		/* -- invalid arg -- */
 		else {
-			sf_error("Command execution.\n");
-			fprintf(out, "Error executing command: %s", first_arg);
+			sf_error("command execution");
+			fprintf(out, "Error executing command: %s\n", first_arg);
+			free_arr_mem(args_arr, arr_len);
 			continue;
 		}
+		/* free memory from args_arr */
+		free_arr_mem(args_arr, arr_len);
   	}
+  	free_arr_mem(args_arr, arr_len);
 
   	/*for(int i = 0; i < arr_len; i++) {
   		fprintf(out, "%s\n", args_arr[i]);
