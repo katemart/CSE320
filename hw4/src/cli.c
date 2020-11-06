@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "daemon_list.h"
+#include "daemon.h"
 
 #define prompt "legion>"
 #define help_message "Available commands:\n" \
@@ -53,8 +53,13 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	/* make args_arr from delim words */
 	int args = 0;
 	if(*arrbuf == '\'') {
+		/* if a quot mark is encountered, read until next mark */
 		arrbuf++;
 		str = strchr(arrbuf, '\'');
+		/* if there is not an ending quot mark, continue til end of line */
+		if(!str) {
+			str = strchr(arrbuf, '\0');
+		}
 	} else str = strchr(arrbuf, ' ');
 	while(str) {
 		/* null-terminate str */
@@ -71,10 +76,12 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 		if(*arrbuf == '\'') {
 			arrbuf++;
 			str = strchr(arrbuf, '\'');
+			if(!str) {
+				str = strchr(arrbuf, '\0');
+			}
 		} else str = strchr(arrbuf, ' ');
 		/* expand mem if needed */
 		if(args == n) {
-			//printf("getting more mem!\n");
 			n += 5;
 			*args_arr = realloc(*args_arr, (n)*sizeof(char *));
 			/* check that memory was successfully allocated */
@@ -89,6 +96,10 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	free(linebuf);
 	/* get actual arr len */
 	*arr_len = args;
+
+	/*for(int i = 0; i < args; i++) {
+  		fprintf(out, "%s\n", (*args_arr)[i]);
+  	}*/
 }
 
 /* function to free mem in array */
@@ -112,7 +123,7 @@ void run_cli(FILE *in, FILE *out)
   		/* flush buffer
 		 * note: we do this because "legion>" doesn't have \n at the end
 		 * buffers are flushed when too large (or newline in the case of stdout), then
-		 * when proggraam returns from main, glibc flushes all buffers for FILE *
+		 * when program returns from main, glibc flushes all buffers for FILE *
 		 */
   		fflush(out);
   		/* parse given args */
@@ -124,7 +135,6 @@ void run_cli(FILE *in, FILE *out)
 	  		free_arr_mem(args_arr, arr_len);
 	  		continue;
 	  	}
-	  	//fprintf(out, "%d\n", arr_len);
 	  	/* if not empty, continue to validate args */
 	  	char *first_arg = args_arr[0];
 	  	/* -- help -- */
@@ -151,8 +161,14 @@ void run_cli(FILE *in, FILE *out)
 			d->name = args_arr[1];
 			d->command = args_arr[2];
 			d->status = 1;
+			/* add daemon to "list" */
+			add_daemon(d);
 			/* call register event function */
 			sf_register(d->name, d->command);
+		}
+		/* -- status -- */
+		else if(strcmp(first_arg, "status") == 0) {
+
 		}
 		/* -- invalid arg -- */
 		else {
