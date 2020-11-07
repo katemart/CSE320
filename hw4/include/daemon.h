@@ -16,10 +16,10 @@ typedef struct d_struct {
 void add_daemon(D_STRUCT *daemon);
 
 /* get daemon from list */
-void get_daemon(char *daemon);
+D_STRUCT *get_daemon(char *d_name);
 
 /* remove daemon from list */
-void remove_daemon(D_STRUCT *daemon);
+void remove_daemon(char *d_name);
 
 /* iterate through daemons */
 void print_daemon();
