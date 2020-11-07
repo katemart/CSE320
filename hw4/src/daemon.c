@@ -47,9 +47,10 @@ void remove_daemon(char *d_name) {
 }
 
 /* iterate through daemons */
-void print_daemon() {
+void print_daemons(FILE *out) {
 	while(head != NULL) {
-		printf("Daemon [Name %s, Command %s, Status %d\n]", head->name, head->command, head->status);
+		fprintf(out, "Daemon [Name %s, PID %d, Command %s, Status %d]\n",
+			head->name, head->pid, head->command, head->status);
 		head = head->next;
 	}
 }
