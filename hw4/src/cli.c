@@ -148,23 +148,34 @@ void run_cli(FILE *in, FILE *out)
 		else if(strcmp(first_arg, "register") == 0) {
 			/* check that num of args is two or more (+1 for first_arg) */
 			if(arr_len < 3) {
+				fprintf(out, "Usage: register <daemon> <cmd-and-args>\n");
 				sf_error("command execution");
 				fprintf(out, "Error executing command: %s\n", first_arg);
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
-			/* if so, create daemon */
+			/* check if daemon is already registered */
+			if(get_daemon(args_arr[1]) != NULL) {
+				fprintf(out, "Daemon %s is already registered.\n", args_arr[1]);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			/* if not, create daemon */
 			D_STRUCT *d = malloc(sizeof(D_STRUCT));
 			if(d == NULL) {
 				return;
 			}
 			d->name = args_arr[1];
-			d->command = args_arr[2];
+			d->pid = 0;
 			d->status = 1;
+			d->command = args_arr[2];
 			/* add daemon to "list" */
 			add_daemon(d);
 			/* call register event function */
 			sf_register(d->name, d->command);
+			//print_daemons(out);
 		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
