@@ -113,9 +113,6 @@ void free_arr_mem(char **arr, int arr_len) {
 void run_cli(FILE *in, FILE *out)
 {
     // TO BE IMPLEMENTED
-    /* create array tp hold args */
-    int arr_len = 0;
-  	char **args_arr = NULL;
   	/* prompt loop */
   	while(1) {
   		/* print out prompt */
@@ -127,6 +124,9 @@ void run_cli(FILE *in, FILE *out)
 		 */
   		fflush(out);
   		/* parse given args */
+  		/* create array to hold args */
+    	int arr_len = 0;
+  		char **args_arr = NULL;
   		parse_args(&args_arr, &arr_len, out);
 	  	/* check that args array is not empty */
 	  	if(arr_len == 0) {
@@ -154,14 +154,6 @@ void run_cli(FILE *in, FILE *out)
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
-			/* check if daemon is already registered */
-			if(get_daemon(args_arr[1]) != NULL) {
-				fprintf(out, "Daemon %s is already registered.\n", args_arr[1]);
-				sf_error("command execution");
-				fprintf(out, "Error executing command: %s\n", first_arg);
-				free_arr_mem(args_arr, arr_len);
-				continue;
-			}
 			/* if not, create daemon */
 			D_STRUCT *d = malloc(sizeof(D_STRUCT));
 			if(d == NULL) {
@@ -171,7 +163,15 @@ void run_cli(FILE *in, FILE *out)
 			d->pid = 0;
 			d->status = 1;
 			d->command = args_arr[2];
-			/* add daemon to "list" */
+			/* check if daemon is already registered */
+			if(get_daemon(d->name) != NULL) {
+				fprintf(out, "Daemon %s is already registered.\n", d->name);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			/* if not, add daemon to "list" */
 			add_daemon(d);
 			/* call register event function */
 			sf_register(d->name, d->command);
@@ -179,7 +179,27 @@ void run_cli(FILE *in, FILE *out)
 		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
-
+			//fprintf(out, "%d\n", arr_len);
+			if(arr_len != 2) {
+				fprintf(out, "Wrong number of args (given: %d, required: 1) for command 'status'\n", arr_len-1);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			/* check if daemon is already registered */
+			if(get_daemon(out, args_arr[1]) == NULL) {
+				fprintf(out, "Daemon %s is not registered.\n", args_arr[1]);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			print_daemon(out, args_arr[1]);
+		}
+		/* -- status-all -- */
+		else if(strcmp(first_arg, "status-all") == 0) {
+			print_daemons(out);
 		}
 		/* -- invalid arg -- */
 		else {
@@ -189,9 +209,8 @@ void run_cli(FILE *in, FILE *out)
 			continue;
 		}
 		/* free memory from args_arr */
-		free_arr_mem(args_arr, arr_len);
+		//free_arr_mem(args_arr, arr_len);
   	}
-  	free_arr_mem(args_arr, arr_len);
 
   	/*for(int i = 0; i < arr_len; i++) {
   		fprintf(out, "%s\n", args_arr[i]);
