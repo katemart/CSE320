@@ -21,6 +21,8 @@ D_STRUCT *get_daemon(char *d_name);
 /* remove daemon from list */
 void remove_daemon(char *d_name);
 
+void print_daemon(FILE *out, char *d_name);
+
 /* iterate through daemons */
 void print_daemons(FILE *out);
 
