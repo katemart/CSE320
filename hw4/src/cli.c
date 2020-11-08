@@ -199,6 +199,33 @@ void run_cli(FILE *in, FILE *out)
 		else if(strcmp(first_arg, "status-all") == 0) {
 			print_daemons(out);
 		}
+		/* -- unregister -- */
+		else if(strcmp(first_arg, "unregister") == 0) {
+			D_STRUCT *d = get_daemon(args_arr[1]);
+			/* check if daemon is NOT already registered */
+			if(d == NULL) {
+				fprintf(out, "Daemon %s is not registered.\n", args_arr[1]);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			} else {
+				/* if daemon is registered, check that it is inactive */
+				if(d->status == 2) {
+					/* if it is inactive, remove daemon */
+					remove_daemon(d->name);
+					/* call unregister event function */
+					sf_unregister(d->name);
+				} else {
+					/* if it is not inactive, throw error */
+					fprintf(out, "Daemon %s is not inactive.\n", args_arr[1]);
+					sf_error("command execution");
+					fprintf(out, "Error executing command: %s\n", first_arg);
+					free_arr_mem(args_arr, arr_len);
+					continue;
+				}
+			}
+		}
 		/* -- invalid arg -- */
 		else {
 			sf_error("command execution");

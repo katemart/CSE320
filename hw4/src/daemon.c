@@ -52,6 +52,7 @@ void remove_daemon(char *d_name) {
 		if(temp == NULL) return;
 		/* unlink/remove daemon */
 		prev->next = temp->next;
+		free(temp);
 	}
 }
 
