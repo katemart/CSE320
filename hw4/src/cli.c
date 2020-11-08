@@ -188,7 +188,7 @@ void run_cli(FILE *in, FILE *out)
 				continue;
 			}
 			/* check if daemon is already registered */
-			if(get_daemon(out, args_arr[1]) == NULL) {
+			if(get_daemon(args_arr[1]) == NULL) {
 				fprintf(out, "Daemon %s is not registered.\n", args_arr[1]);
 				sf_error("command execution");
 				fprintf(out, "Error executing command: %s\n", first_arg);
