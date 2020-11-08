@@ -162,7 +162,7 @@ void run_cli(FILE *in, FILE *out)
 			d->name = args_arr[1];
 			d->pid = 0;
 			d->status = 1;
-			d->command = args_arr[2];
+			d->command = args_arr + 2;
 			/* check if daemon is already registered */
 			if(get_daemon(d->name) != NULL) {
 				fprintf(out, "Daemon %s is already registered.\n", d->name);
@@ -174,7 +174,7 @@ void run_cli(FILE *in, FILE *out)
 			/* if not, add daemon to "list" */
 			add_daemon(d);
 			/* call register event function */
-			sf_register(d->name, d->command);
+			sf_register(d->name, d->command[0]);
 			//print_daemons(out);
 		}
 		/* -- status -- */
@@ -187,11 +187,9 @@ void run_cli(FILE *in, FILE *out)
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
-			/* check if daemon is already registered */
+			/* check if daemon is NOT already registered */
 			if(get_daemon(args_arr[1]) == NULL) {
-				fprintf(out, "Daemon %s is not registered.\n", args_arr[1]);
-				sf_error("command execution");
-				fprintf(out, "Error executing command: %s\n", first_arg);
+				fprintf(out, "%s\t0\tunknown\n", args_arr[1]);
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}

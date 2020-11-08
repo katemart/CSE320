@@ -8,7 +8,7 @@ typedef struct d_struct {
 	char *name;
 	int pid;
 	enum daemon_status status;
-	char *command;
+	char **command;
 	struct d_struct *next;
 } D_STRUCT;
 
@@ -21,6 +21,7 @@ D_STRUCT *get_daemon(char *d_name);
 /* remove daemon from list */
 void remove_daemon(char *d_name);
 
+/* print status for registered daemon */
 void print_daemon(FILE *out, char *d_name);
 
 /* iterate through daemons */
