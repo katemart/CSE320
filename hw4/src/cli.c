@@ -45,8 +45,6 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	char arr[linelen];
 	char *arrbuf = arr;
 	strcpy(arrbuf, linebuf);
-	/* turn newline to space */
-	arrbuf[linelen-1] = ' ';
 	/* account for spaces at beginning */
 	while(*arrbuf && (*arrbuf == ' '))
 	  arrbuf++;
@@ -58,9 +56,15 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 		str = strchr(arrbuf, '\'');
 		/* if there is not an ending quot mark, continue til end of line */
 		if(!str) {
-			str = strchr(arrbuf, '\0');
+			str = strchr(arrbuf, '\n');
 		}
-	} else str = strchr(arrbuf, ' ');
+	} else {
+		/* use spaces as delimiter */
+	    str = strchr(arrbuf, ' ');
+	    if(!str) {
+		    str = strchr(arrbuf, '\n');
+		}
+	}
 	while(str) {
 		/* null-terminate str */
 		*str = '\0';
@@ -77,9 +81,14 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 			arrbuf++;
 			str = strchr(arrbuf, '\'');
 			if(!str) {
-				str = strchr(arrbuf, '\0');
+				str = strchr(arrbuf, '\n');
 			}
-		} else str = strchr(arrbuf, ' ');
+		} else {
+		    str = strchr(arrbuf, ' ');
+		    if(!str) {
+			    str = strchr(arrbuf, '\n');
+			}
+		}
 		/* expand mem if needed */
 		if(args == n) {
 			n += 5;
@@ -129,7 +138,7 @@ void run_cli(FILE *in, FILE *out)
   		char **args_arr = NULL;
   		parse_args(&args_arr, &arr_len, out);
 	  	/* check that args array is not empty */
-	  	if(arr_len == 0) {
+	  	if(arr_len <= 0) {
 	  		sf_error("command execution");
 	  		fprintf(out, "Command must be specified.\n");
 	  		free_arr_mem(args_arr, arr_len);
@@ -142,6 +151,13 @@ void run_cli(FILE *in, FILE *out)
   			fprintf(out, "%s", help_message);
   		/* -- quit -- */
   		else if(strcmp(first_arg, "quit") == 0) {
+  			if(arr_len != 1) {
+				fprintf(out, "Wrong number of args (given: %d, required: 0) for command 'quit'\n", arr_len-1);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
 			break;
 		}
 		/* -- register -- */
