@@ -10,7 +10,7 @@
 #define help_message "Available commands:\n" \
 "help (0 args) Print this help message\n" \
 "quit (0 args) Quit the program\n" \
-"register (0 args) Register a daemon\n" \
+"register (2 or more args) Register a daemon\n" \
 "unregister (1 args) Unregister a daemon\n" \
 "status (1 args) Show the status of a daemon\n" \
 "status-all (0 args) Show the status of all daemons\n" \
@@ -119,6 +119,30 @@ void free_arr_mem(char **arr, int arr_len) {
 	free(arr);
 }
 
+void setup(char **arr, FILE *out) {
+	int p[2];
+	pid_t child_pid;
+	fprintf(out, "%s\n", arr[0]);
+	if(pipe(p) != 0) {
+		fprintf(out, "Error creating pipe");
+		sf_error("command execution");
+		fprintf(out, "Error executing command: %s\n", arr[0]);
+		return;
+	}
+	/* fork returns child PID to parent and zero to the child */
+	if ((child_pid = fork()) == 0) {
+		/* set pgid */
+		setpgid(0, 0);
+
+
+	} else {
+		fprintf(out, "Fork error");
+		sf_error("command execution");
+		fprintf(out, "Error executing command: %s\n", arr[0]);
+		return;
+	}
+}
+
 void run_cli(FILE *in, FILE *out)
 {
     // TO BE IMPLEMENTED
@@ -180,7 +204,7 @@ void run_cli(FILE *in, FILE *out)
 			d->status = 1;
 			d->command = args_arr + 2;
 			/* check if daemon is already registered */
-			if(get_daemon(d->name) != NULL) {
+			if(get_daemon_name(d->name) != NULL) {
 				fprintf(out, "Daemon %s is already registered.\n", d->name);
 				sf_error("command execution");
 				fprintf(out, "Error executing command: %s\n", first_arg);
@@ -193,6 +217,28 @@ void run_cli(FILE *in, FILE *out)
 			sf_register(d->name, d->command[0]);
 			//print_daemons(out);
 		}
+		/* -- start -- */
+		else if(strcmp(first_arg, "start") == 0) {
+			D_STRUCT *d = get_daemon_name(args_arr[1]);
+			/* check if daemon is NOT already registered */
+			if(d == NULL) {
+				fprintf(out, "Daemon %s is not registered.\n", args_arr[1]);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			} else {
+				/* if daemon is registered, check that it isn't started already */
+				if(d->status == 4) {
+					fprintf(out, "Daemon %s is already active.\n", d->name);
+					sf_error("command execution");
+					fprintf(out, "Error executing command: %s\n", first_arg);
+					free_arr_mem(args_arr, arr_len);
+					continue;
+				}
+			}
+			//setup(args_arr, out);
+		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
 			//fprintf(out, "%d\n", arr_len);
@@ -204,7 +250,7 @@ void run_cli(FILE *in, FILE *out)
 				continue;
 			}
 			/* check if daemon is NOT already registered */
-			if(get_daemon(args_arr[1]) == NULL) {
+			if(get_daemon_name(args_arr[1]) == NULL) {
 				fprintf(out, "%s\t0\tunknown\n", args_arr[1]);
 				free_arr_mem(args_arr, arr_len);
 				continue;
@@ -217,7 +263,7 @@ void run_cli(FILE *in, FILE *out)
 		}
 		/* -- unregister -- */
 		else if(strcmp(first_arg, "unregister") == 0) {
-			D_STRUCT *d = get_daemon(args_arr[1]);
+			D_STRUCT *d = get_daemon_name(args_arr[1]);
 			/* check if daemon is NOT already registered */
 			if(d == NULL) {
 				fprintf(out, "Daemon %s is not registered.\n", args_arr[1]);
@@ -234,7 +280,7 @@ void run_cli(FILE *in, FILE *out)
 					sf_unregister(d->name);
 				} else {
 					/* if it is not inactive, throw error */
-					fprintf(out, "Daemon %s is not inactive.\n", args_arr[1]);
+					fprintf(out, "Daemon %s is not inactive.\n", d->name);
 					sf_error("command execution");
 					fprintf(out, "Error executing command: %s\n", first_arg);
 					free_arr_mem(args_arr, arr_len);
@@ -246,6 +292,7 @@ void run_cli(FILE *in, FILE *out)
 		else {
 			sf_error("command execution");
 			fprintf(out, "Error executing command: %s\n", first_arg);
+			fprintf(out, "%s", help_message);
 			free_arr_mem(args_arr, arr_len);
 			continue;
 		}
