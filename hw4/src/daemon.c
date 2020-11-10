@@ -17,12 +17,26 @@ void add_daemon(D_STRUCT *daemon) {
 	}
 }
 
-/* get daemon from list */
-D_STRUCT *get_daemon(char *d_name) {
+/* get daemon from list using name */
+D_STRUCT *get_daemon_name(char *d_name) {
 	if(head != NULL) {
 		D_STRUCT *curr = head;
 		while(curr != NULL) {
 			if(strcmp(curr->name, d_name) == 0) {
+				return head;
+			}
+			curr = curr->next;
+		}
+	}
+	return NULL;
+}
+
+/* get daemon from list using PID */
+D_STRUCT *get_daemon_pid(int d_pid) {
+	if(head != NULL) {
+		D_STRUCT *curr = head;
+		while(curr != NULL) {
+			if(curr->pid == d_pid) {
 				return head;
 			}
 			curr = curr->next;

@@ -15,8 +15,11 @@ typedef struct d_struct {
 /* add daemon to list */
 void add_daemon(D_STRUCT *daemon);
 
-/* get daemon from list */
-D_STRUCT *get_daemon(char *d_name);
+/* get daemon from list using name */
+D_STRUCT *get_daemon_name(char *d_name);
+
+/* get daemon from list using PID */
+D_STRUCT *get_daemon_pid(int pid);
 
 /* remove daemon from list */
 void remove_daemon(char *d_name);
