@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "daemon.h"
+#include "debug.h"
 
 #define prompt "legion>"
 #define help_message "Available commands:\n" \
@@ -18,27 +19,35 @@
 "stop (1 args) Stop a daemon\n" \
 "logrotate (1 args) Rotate log files for a daemon\n"
 
-/* function to parse input line args */
-void parse_args(char ***args_arr, int *arr_len, FILE *out) {
-	/* (dynamically allocated) arr to hold args */
-	/* initial arr size is set to 5 */
-	int n = 5;
-	*args_arr = malloc(n *sizeof(char *));
-	/* check that memory was successfully allocated */
-	if(*args_arr == NULL) {
-		fprintf(out, "Error allocating memory for array");
-		return;
+/* function to free mem in array */
+void free_arr_mem(char **arr, int arr_len) {
+	for(int i = 0; i < arr_len; i++) {
+		free(arr[i]);
 	}
+	free(arr);
+}
+
+/* function to parse input line args */
+int parse_args(char ***args_arr, int *arr_len, FILE *out) {
   	/* getline */
   	size_t len = 0;
 	char *linebuf = NULL;
   	int linelen = getline(&linebuf, &len, stdin);
   	/* check for EOF */
   	if(linelen < 0) {
+  		free(linebuf);
   		fprintf(out, "Error reading command -- giving up.\n");
-  		sf_fini();
-  		exit(0);
+  		return -1;
   	}
+  	/* (dynamically allocated) arr to hold args */
+	/* initial arr size is set to 5 */
+	int n = 5;
+	*args_arr = malloc(n *sizeof(char *));
+	/* check that memory was successfully allocated */
+	if(*args_arr == NULL) {
+		fprintf(out, "Error allocating memory for array");
+		return -1;
+	}
   	/* var to point to delim str */
   	char *str = NULL;
 	/* ptr to traverse args_arr */
@@ -71,7 +80,7 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 		/* make sure that string was correctly dup */
 		if(((*args_arr)[args++] = strdup(arrbuf)) == NULL) {
 			fprintf(out, "Error duplicating string");
-			return;
+			return -1;
 		}
 		arrbuf = str + 1;
 		/* account for spaces */
@@ -96,7 +105,7 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 			/* check that memory was successfully allocated */
 			if(*args_arr == NULL) {
 				fprintf(out, "Error expanding memory for array");
-				return;
+				return -1;
 			}
 		}
 	}
@@ -105,41 +114,46 @@ void parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	free(linebuf);
 	/* get actual arr len */
 	*arr_len = args;
-
 	/*for(int i = 0; i < args; i++) {
   		fprintf(out, "%s\n", (*args_arr)[i]);
   	}*/
+  	return 0;
 }
 
-/* function to free mem in array */
-void free_arr_mem(char **arr, int arr_len) {
-	for(int i = 0; i < arr_len; i++) {
-		free(arr[i]);
-	}
-	free(arr);
-}
-
-void setup(char **arr, FILE *out) {
-	int p[2];
+void setup(D_STRUCT *d, FILE *out) {
+	fprintf(out, "%s\n", d->name);
+	int fd[2];
 	pid_t child_pid;
-	fprintf(out, "%s\n", arr[0]);
-	if(pipe(p) != 0) {
+	if(pipe(fd) != 0) {
 		fprintf(out, "Error creating pipe");
 		sf_error("command execution");
-		fprintf(out, "Error executing command: %s\n", arr[0]);
+		fprintf(out, "Error executing command: %s\n", d->name);
 		return;
 	}
 	/* fork returns child PID to parent and zero to the child */
 	if ((child_pid = fork()) == 0) {
+		/* this is child process */
 		/* set pgid */
 		setpgid(0, 0);
-
+		/* close child read side since we are writing to parent */
+		close(fd[0]);
+		/* redirect stdout of child process */
+		dup2(fd[1], SYNC_FD);
+		/* get PATH env */
+		char *env = getenv(PATH_ENV_VAR);
+		/* create large enough string (+1 for : and +1 for \0) */
+		char *new_path = malloc(strlen(DAEMONS_DIR) + 1 + strlen(env) + 1);
+		/* prepend strings */
+		strcpy(new_path, DAEMONS_DIR);
+		new_path[strlen(DAEMONS_DIR)] = ':';
+		strcat(new_path, env);
+		debug("%s", new_path);
 
 	} else {
-		fprintf(out, "Fork error");
-		sf_error("command execution");
-		fprintf(out, "Error executing command: %s\n", arr[0]);
-		return;
+		/* this is parent process */
+		/* close parent write side since we are reading from child */
+		close(fd[1]);
+
 	}
 }
 
@@ -160,7 +174,12 @@ void run_cli(FILE *in, FILE *out)
   		/* create array to hold args */
     	int arr_len = 0;
   		char **args_arr = NULL;
-  		parse_args(&args_arr, &arr_len, out);
+  		/* check that args were succesfully parsed */
+  		if(parse_args(&args_arr, &arr_len, out) < 0) {
+  			//free_arr_mem(args_arr, arr_len);
+  			remove_daemons();
+  			break;
+  		}
 	  	/* check that args array is not empty */
 	  	if(arr_len <= 0) {
 	  		sf_error("command execution");
@@ -182,6 +201,7 @@ void run_cli(FILE *in, FILE *out)
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
+			free_arr_mem(args_arr, arr_len);
 			break;
 		}
 		/* -- register -- */
@@ -215,7 +235,6 @@ void run_cli(FILE *in, FILE *out)
 			add_daemon(d);
 			/* call register event function */
 			sf_register(d->name, d->command[0]);
-			//print_daemons(out);
 		}
 		/* -- start -- */
 		else if(strcmp(first_arg, "start") == 0) {
@@ -228,16 +247,20 @@ void run_cli(FILE *in, FILE *out)
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			} else {
-				/* if daemon is registered, check that it isn't started already */
-				if(d->status == 4) {
+				/* if daemon is registered, check that it isn't started already
+				 * i.e., if current status is anything other than inactive then error
+				 */
+				if(d->status != 1) {
 					fprintf(out, "Daemon %s is already active.\n", d->name);
 					sf_error("command execution");
 					fprintf(out, "Error executing command: %s\n", first_arg);
 					free_arr_mem(args_arr, arr_len);
 					continue;
 				}
+				/* set daemon status to starting */
+				d->status = 3;
 			}
-			//setup(args_arr, out);
+			setup(d, out);
 		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
@@ -275,7 +298,7 @@ void run_cli(FILE *in, FILE *out)
 				/* if daemon is registered, check that it is inactive */
 				if(d->status == 2) {
 					/* if it is inactive, remove daemon */
-					remove_daemon(d->name);
+					remove_daemon_name(d->name);
 					/* call unregister event function */
 					sf_unregister(d->name);
 				} else {
@@ -299,7 +322,6 @@ void run_cli(FILE *in, FILE *out)
 		/* free memory from args_arr */
 		//free_arr_mem(args_arr, arr_len);
   	}
-
   	/*for(int i = 0; i < arr_len; i++) {
   		fprintf(out, "%s\n", args_arr[i]);
   	}*/
