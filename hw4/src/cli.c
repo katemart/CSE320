@@ -2,6 +2,10 @@
  * Legion: Command-line interface
  */
 
+#ifndef _GNU_SOURCE
+# define _GNU_SOURCE
+#endif
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include "daemon.h"
@@ -18,6 +22,9 @@
 "start (1 args) Start a daemon\n" \
 "stop (1 args) Stop a daemon\n" \
 "logrotate (1 args) Rotate log files for a daemon\n"
+
+/* env var from libc */
+extern char **environ;
 
 /* function to free mem in array */
 void free_arr_mem(char **arr, int arr_len) {
@@ -120,15 +127,13 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
   	return 0;
 }
 
-void setup(D_STRUCT *d, FILE *out) {
-	fprintf(out, "%s\n", d->name);
+int set_processes(D_STRUCT *d, FILE *out) {
+	//FILE *fp = fopen("", "ab+");
 	int fd[2];
 	pid_t child_pid;
 	if(pipe(fd) != 0) {
 		fprintf(out, "Error creating pipe");
-		sf_error("command execution");
-		fprintf(out, "Error executing command: %s\n", d->name);
-		return;
+		return -1;
 	}
 	/* fork returns child PID to parent and zero to the child */
 	if ((child_pid = fork()) == 0) {
@@ -139,22 +144,46 @@ void setup(D_STRUCT *d, FILE *out) {
 		close(fd[0]);
 		/* redirect stdout of child process */
 		dup2(fd[1], SYNC_FD);
+		/* redirect daemon output to file log */
+		char buf[20];
+		snprintf(buf, 20, "%s/%s.log.%c", LOGFILE_DIR, d->name, '0');
+		debug("%s", buf);
+		FILE *log_fp = fopen(buf, "ab+");
+		if(log_fp == NULL) {
+			fprintf(out, "Error creating log file");
+		return -1;
+		}
+		int log_fd = fileno(log_fp);
+		if(log_fd == -1) {
+			fprintf(out, "Error creating log file");
+			return -1;
+		}
+		dup2(log_fd, 1);
 		/* get PATH env */
-		char *env = getenv(PATH_ENV_VAR);
+		char *old_env = getenv(PATH_ENV_VAR);
+		//debug("%s", old_env);
 		/* create large enough string (+1 for : and +1 for \0) */
-		char *new_path = malloc(strlen(DAEMONS_DIR) + 1 + strlen(env) + 1);
+		char *new_path = malloc(strlen(DAEMONS_DIR) + 1 + strlen(old_env) + 1);
 		/* prepend strings */
 		strcpy(new_path, DAEMONS_DIR);
 		new_path[strlen(DAEMONS_DIR)] = ':';
-		strcat(new_path, env);
-		debug("%s", new_path);
-
+		strcat(new_path, old_env);
+		/* set new PATH env */
+		setenv(PATH_ENV_VAR, new_path, 1);
+		debug("%s", getenv(PATH_ENV_VAR));
+		/* use execvpe to execute command registered for the daemon */
+		if(execvpe(d->command[0], d->command, environ) < 0) {
+			sf_error("command execution");
+			fprintf(out, "Error executing command: %s\n", d->name);
+			return -1;
+		}
 	} else {
 		/* this is parent process */
 		/* close parent write side since we are reading from child */
 		close(fd[1]);
 
 	}
+	return 0;
 }
 
 void run_cli(FILE *in, FILE *out)
@@ -223,6 +252,7 @@ void run_cli(FILE *in, FILE *out)
 			d->pid = 0;
 			d->status = 1;
 			d->command = args_arr + 2;
+			//debug("%s", d->command[0]);
 			/* check if daemon is already registered */
 			if(get_daemon_name(d->name) != NULL) {
 				fprintf(out, "Daemon %s is already registered.\n", d->name);
@@ -260,7 +290,7 @@ void run_cli(FILE *in, FILE *out)
 				/* set daemon status to starting */
 				d->status = 3;
 			}
-			setup(d, out);
+			set_processes(d, out);
 		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
