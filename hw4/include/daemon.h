@@ -22,7 +22,10 @@ D_STRUCT *get_daemon_name(char *d_name);
 D_STRUCT *get_daemon_pid(int pid);
 
 /* remove daemon from list */
-void remove_daemon(char *d_name);
+void remove_daemon_name(char *d_name);
+
+/* remove all daemons in list */
+void remove_daemons();
 
 /* print status for registered daemon */
 void print_daemon(FILE *out, char *d_name);

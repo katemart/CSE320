@@ -46,7 +46,7 @@ D_STRUCT *get_daemon_pid(int d_pid) {
 }
 
 /* remove daemon from list note: might need two vars */
-void remove_daemon(char *d_name) {
+void remove_daemon_name(char *d_name) {
 	if(head != NULL) {
 		D_STRUCT *temp = head;
 		D_STRUCT *prev = NULL;
@@ -70,9 +70,20 @@ void remove_daemon(char *d_name) {
 	}
 }
 
+/* remove all daemons */
+void remove_daemons()
+{
+   D_STRUCT *temp;
+   while (head != NULL) {
+       temp = head;
+       head = head->next;
+       free(temp);
+    }
+}
+
 void print_daemon(FILE *out, char *d_name) {
 	if(head != NULL) {
-		D_STRUCT *curr = get_daemon(d_name);
+		D_STRUCT *curr = get_daemon_name(d_name);
 		if(curr != NULL) {
 			fprintf(out, "%s\t%d\t%s\n", curr->name, curr->pid, d_status[curr->status]);
 		}
@@ -89,4 +100,3 @@ void print_daemons(FILE *out) {
 		}
 	}
 }
-
