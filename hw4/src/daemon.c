@@ -23,7 +23,7 @@ D_STRUCT *get_daemon_name(char *d_name) {
 		D_STRUCT *curr = head;
 		while(curr != NULL) {
 			if(strcmp(curr->name, d_name) == 0) {
-				return head;
+				return curr;
 			}
 			curr = curr->next;
 		}
@@ -37,12 +37,22 @@ D_STRUCT *get_daemon_pid(int d_pid) {
 		D_STRUCT *curr = head;
 		while(curr != NULL) {
 			if(curr->pid == d_pid) {
-				return head;
+				return curr;
 			}
 			curr = curr->next;
 		}
 	}
 	return NULL;
+}
+
+void free_daemon(D_STRUCT *d) {
+	char **words = d->words;
+	while(*words != NULL) {
+		free(*words);
+		words++;
+	}
+	free(d->words);
+	free(d);
 }
 
 /* remove daemon from list note: might need two vars */
@@ -66,18 +76,8 @@ void remove_daemon_name(char *d_name) {
 		if(temp == NULL) return;
 		/* unlink/remove daemon */
 		prev->next = temp->next;
-		free(temp);
+		free_daemon(temp);
 	}
-}
-
-void free_daemon(D_STRUCT *d) {
-	char **words = d->words;
-	while(*words != NULL) {
-		free(*words);
-		words++;
-	}
-	free(d->words);
-	free(d);
 }
 
 /* remove all daemons */
