@@ -32,7 +32,7 @@ extern char **environ;
 /* vars for signal handling */
 typedef void (*sig_handler)(int);
 static volatile pid_t pid = 0;
-static volatile sig_atomic_t sigint_flag;
+static volatile sig_atomic_t sigint_flag = 0;
 
 /* declare prototypes */
 void alarm_handler(int signum);
@@ -57,7 +57,7 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	*args_arr = malloc(n *sizeof(char *));
 	/* check that memory was successfully allocated */
 	if(*args_arr == NULL) {
-		fprintf(out, "Error allocating memory for array");
+		fprintf(out, "Error allocating memory for array\n");
 		return -1;
 	}
   	/* var to point to delim str */
@@ -91,7 +91,7 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
 		*str = '\0';
 		/* make sure that string was correctly dup */
 		if(((*args_arr)[args++] = strdup(arrbuf)) == NULL) {
-			fprintf(out, "Error duplicating string");
+			fprintf(out, "Error duplicating string\n");
 			return -1;
 		}
 		arrbuf = str + 1;
@@ -116,7 +116,7 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
 			*args_arr = realloc(*args_arr, (n)*sizeof(char *));
 			/* check that memory was successfully allocated */
 			if(*args_arr == NULL) {
-				fprintf(out, "Error expanding memory for array");
+				fprintf(out, "Error expanding memory for array\n");
 				return -1;
 			}
 		}
@@ -145,12 +145,13 @@ int set_processes(D_STRUCT *d, FILE *out) {
 	int fd[2];
 	pid_t child_pid;
 	if(pipe(fd) != 0) {
-		fprintf(out, "Error creating pipe");
+		fprintf(out, "Error creating pipe\n");
 		return -1;
 	}
 	/* fork returns child PID to parent and zero to the child */
 	if ((child_pid = fork()) == 0) {
 		/* this is child process */
+		d->pid = child_pid;
 		/* set pgid */
 		setpgid(0, 0);
 		/* close child read side since we are writing to parent */
@@ -167,12 +168,12 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		//debug("%s", file_buf);
 		FILE *log_fp = fopen(file_buf, "ab+");
 		if(log_fp == NULL) {
-			fprintf(out, "Error creating log file");
+			fprintf(out, "Error creating log file\n");
 			exit(1);
 		}
 		int log_fd = fileno(log_fp);
 		if(log_fd == -1) {
-			fprintf(out, "Error creating log file");
+			fprintf(out, "Error creating log file\n");
 			exit(1);
 		}
 		if(dup2(log_fd, 1) < 0)
@@ -214,6 +215,8 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		/* read one-byte */
 		char read_buf[5];
 		if(read(fd[0], &read_buf, 1) != -1) {
+			/* cancel alarm */
+			alarm(0);
 			/* set daemon status to active */
 			d->status = 3;
 			/* call active event function */
@@ -270,8 +273,8 @@ void run_cli(FILE *in, FILE *out)
   		fflush(out);
   		/* parse given args */
   		/* create array to hold args */
-    	int arr_len;
-  		char **args_arr;
+    	int arr_len = 0;
+  		char **args_arr = NULL;
   		/* check that args were succesfully parsed */
   		if(parse_args(&args_arr, &arr_len, out) < 0) {
   			remove_daemons();
@@ -298,7 +301,7 @@ void run_cli(FILE *in, FILE *out)
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
-			free_arr_mem(args_arr, arr_len);
+			//free_arr_mem(args_arr, arr_len);
 			remove_daemons();
 			break;
 		}
@@ -346,29 +349,29 @@ void run_cli(FILE *in, FILE *out)
 				fprintf(out, "Error executing command: %s\n", first_arg);
 				free_arr_mem(args_arr, arr_len);
 				continue;
-			} else {
-				/* if daemon is registered, check that it isn't started already
-				 * i.e., if current status is anything other than inactive then error
-				 */
-				if(d->status != 1) {
-					fprintf(out, "Daemon %s is already active.\n", d->name);
-					sf_error("command execution");
-					fprintf(out, "Error executing command: %s\n", first_arg);
-					free_arr_mem(args_arr, arr_len);
-					continue;
-				}
-				/* call start event function */
-				sf_start(d->name);
-				/* set daemon status to starting */
-				d->status = 3;
-				/*start parent and children processes */
-				if(set_processes(d, out) == -1) {
-					sf_error("command execution");
-					fprintf(out, "Error executing command: %s\n", first_arg);
-					free_arr_mem(args_arr, arr_len);
-				}
+			}
+			/* if daemon is registered, check that it isn't started already
+			 * i.e., if current status is anything other than inactive then error
+			 */
+			if(d->status != 1) {
+				fprintf(out, "Daemon %s is already active.\n", d->name);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
+			/* call start event function */
+			sf_start(d->name);
+			/* set daemon status to starting */
+			d->status = 3;
+			/*start parent and children processes */
+			if(set_processes(d, out) == -1) {
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			free_arr_mem(args_arr, arr_len);
 		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
@@ -387,10 +390,12 @@ void run_cli(FILE *in, FILE *out)
 				continue;
 			}
 			print_daemon(out, args_arr[1]);
+			free_arr_mem(args_arr, arr_len);
 		}
 		/* -- status-all -- */
 		else if(strcmp(first_arg, "status-all") == 0) {
 			print_daemons(out);
+			free_arr_mem(args_arr, arr_len);
 		}
 		/* -- unregister -- */
 		else if(strcmp(first_arg, "unregister") == 0) {
