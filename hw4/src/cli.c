@@ -8,9 +8,12 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
 #include "daemon.h"
 #include "debug.h"
-
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
 #define prompt "legion>"
 #define help_message "Available commands:\n" \
 "help (0 args) Print this help message\n" \
@@ -26,13 +29,15 @@
 /* env var from libc */
 extern char **environ;
 
-/* function to free mem in array */
-void free_arr_mem(char **arr, int arr_len) {
-	for(int i = 0; i < arr_len; i++) {
-		free(arr[i]);
-	}
-	free(arr);
-}
+/* vars for signal handling */
+typedef void (*sig_handler)(int);
+static volatile pid_t pid = 0;
+static volatile sig_atomic_t sigint_flag;
+
+/* declare prototypes */
+void alarm_handler(int signum);
+void sigint_handler(int signum);
+int create_signal(int signum, sig_handler handler);
 
 /* function to parse input line args */
 int parse_args(char ***args_arr, int *arr_len, FILE *out) {
@@ -127,6 +132,14 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
   	return 0;
 }
 
+/* function to free mem in array */
+void free_arr_mem(char **arr, int arr_len) {
+	for(int i = 0; i < arr_len; i++) {
+		free(arr[i]);
+	}
+	free(arr);
+}
+
 int set_processes(D_STRUCT *d, FILE *out) {
 	//FILE *fp = fopen("", "ab+");
 	int fd[2];
@@ -144,50 +157,106 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		close(fd[0]);
 		/* redirect stdout of child process */
 		dup2(fd[1], SYNC_FD);
+		/* check if logs dir exists, if not make it */
+		if(mkdir(LOGFILE_DIR, 0777) < 0 && errno != EEXIST) {
+			exit(1);
+		}
 		/* redirect daemon output to file log */
-		char buf[20];
-		snprintf(buf, 20, "%s/%s.log.%c", LOGFILE_DIR, d->name, '0');
-		debug("%s", buf);
-		FILE *log_fp = fopen(buf, "ab+");
+		char file_buf[20];
+		snprintf(file_buf, 20, "%s/%s.log.%c", LOGFILE_DIR, d->name, '0');
+		//debug("%s", file_buf);
+		FILE *log_fp = fopen(file_buf, "ab+");
 		if(log_fp == NULL) {
 			fprintf(out, "Error creating log file");
-		return -1;
+			exit(1);
 		}
 		int log_fd = fileno(log_fp);
 		if(log_fd == -1) {
 			fprintf(out, "Error creating log file");
-			return -1;
+			exit(1);
 		}
-		dup2(log_fd, 1);
-		/* get PATH env */
+		if(dup2(log_fd, 1) < 0)
+			exit(1);
+		/* close child write side once we are done writing */
+		if(close(fd[1]) < 0)
+			exit(1);
+		/* get PATH env (and check if NULL) */
 		char *old_env = getenv(PATH_ENV_VAR);
 		//debug("%s", old_env);
+		size_t old_env_len = old_env == NULL ? 0 : strlen(old_env);
 		/* create large enough string (+1 for : and +1 for \0) */
-		char *new_path = malloc(strlen(DAEMONS_DIR) + 1 + strlen(old_env) + 1);
+		char *new_path = malloc(strlen(DAEMONS_DIR) + 1 + old_env_len + 1);
+		if(new_path == NULL)
+			exit(1);
 		/* prepend strings */
 		strcpy(new_path, DAEMONS_DIR);
-		new_path[strlen(DAEMONS_DIR)] = ':';
+		size_t d_dir_len = strlen(DAEMONS_DIR);
+		new_path[d_dir_len] = ':';
+		new_path[d_dir_len + 1] = '\0';
 		strcat(new_path, old_env);
 		/* set new PATH env */
 		setenv(PATH_ENV_VAR, new_path, 1);
-		debug("%s", getenv(PATH_ENV_VAR));
+		free(new_path);
+		//debug("%s", getenv(PATH_ENV_VAR));
 		/* use execvpe to execute command registered for the daemon */
 		if(execvpe(d->command[0], d->command, environ) < 0) {
 			sf_error("command execution");
 			fprintf(out, "Error executing command: %s\n", d->name);
-			return -1;
+			exit(1);
 		}
 	} else {
 		/* this is parent process */
+		pid = child_pid;
 		/* close parent write side since we are reading from child */
 		close(fd[1]);
-
+		/* set alarm */
+		alarm(CHILD_TIMEOUT);
+		/* read one-byte */
+		char read_buf[5];
+		if(read(fd[0], &read_buf, 1) != -1) {
+			/* set daemon status to active */
+			d->status = 3;
+			/* call active event function */
+			sf_active(d->name, child_pid);
+			/* close pipe file descriptor */
+			close(fd[0]);
+			/* go back to prompt */
+			return 0;
+		} else {
+			fprintf(out, "Error reading from child");
+			return -1;
+		}
 	}
 	return 0;
 }
 
+/* signal handlers */
+void sigint_handler(int signum) {
+	sigint_flag = 1;
+}
+
+void alarm_handler(int signum) {
+	kill(pid, SIGKILL);
+}
+
+/* general func to "install" signal handler using sigaction */
+int create_signal(int signum, sig_handler handler) {
+	struct sigaction s_action;
+	s_action.sa_handler = handler;
+	sigemptyset(&s_action.sa_mask);
+	s_action.sa_flags = SA_RESTART;
+	return sigaction(signum, &s_action, NULL);
+}
+
 void run_cli(FILE *in, FILE *out)
 {
+	/* set signal handlers at beginning */
+	if(create_signal(SIGALRM, alarm_handler) < 0) {
+		return;
+	}
+	if(create_signal(SIGINT, sigint_handler) < 0) {
+		return;
+	}
     // TO BE IMPLEMENTED
   	/* prompt loop */
   	while(1) {
@@ -201,11 +270,10 @@ void run_cli(FILE *in, FILE *out)
   		fflush(out);
   		/* parse given args */
   		/* create array to hold args */
-    	int arr_len = 0;
-  		char **args_arr = NULL;
+    	int arr_len;
+  		char **args_arr;
   		/* check that args were succesfully parsed */
   		if(parse_args(&args_arr, &arr_len, out) < 0) {
-  			//free_arr_mem(args_arr, arr_len);
   			remove_daemons();
   			break;
   		}
@@ -231,6 +299,7 @@ void run_cli(FILE *in, FILE *out)
 				continue;
 			}
 			free_arr_mem(args_arr, arr_len);
+			remove_daemons();
 			break;
 		}
 		/* -- register -- */
@@ -252,6 +321,7 @@ void run_cli(FILE *in, FILE *out)
 			d->pid = 0;
 			d->status = 1;
 			d->command = args_arr + 2;
+			d->words = args_arr;
 			//debug("%s", d->command[0]);
 			/* check if daemon is already registered */
 			if(get_daemon_name(d->name) != NULL) {
@@ -287,10 +357,18 @@ void run_cli(FILE *in, FILE *out)
 					free_arr_mem(args_arr, arr_len);
 					continue;
 				}
+				/* call start event function */
+				sf_start(d->name);
 				/* set daemon status to starting */
 				d->status = 3;
+				/*start parent and children processes */
+				if(set_processes(d, out) == -1) {
+					sf_error("command execution");
+					fprintf(out, "Error executing command: %s\n", first_arg);
+					free_arr_mem(args_arr, arr_len);
+				}
+				continue;
 			}
-			set_processes(d, out);
 		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
