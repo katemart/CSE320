@@ -143,15 +143,15 @@ void free_arr_mem(char **arr, int arr_len) {
 int set_processes(D_STRUCT *d, FILE *out) {
 	//FILE *fp = fopen("", "ab+");
 	int fd[2];
+	pid_t fork_val;
 	pid_t child_pid;
 	if(pipe(fd) != 0) {
 		fprintf(out, "Error creating pipe\n");
 		return -1;
 	}
 	/* fork returns child PID to parent and zero to the child */
-	if ((child_pid = fork()) == 0) {
+	if ((fork_val = fork()) == 0) {
 		/* this is child process */
-		d->pid = child_pid;
 		/* set pgid */
 		setpgid(0, 0);
 		/* close child read side since we are writing to parent */
@@ -207,6 +207,12 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		}
 	} else {
 		/* this is parent process */
+		/* set child pid */
+		child_pid = fork_val;
+		//debug("CHILD PID %d", child_pid);
+		/* set struct pid value */
+		d->pid = child_pid;
+		/* set global pid */
 		pid = child_pid;
 		/* close parent write side since we are reading from child */
 		close(fd[1]);
@@ -407,22 +413,22 @@ void run_cli(FILE *in, FILE *out)
 				fprintf(out, "Error executing command: %s\n", first_arg);
 				free_arr_mem(args_arr, arr_len);
 				continue;
-			} else {
-				/* if daemon is registered, check that it is inactive */
-				if(d->status == 2) {
-					/* if it is inactive, remove daemon */
-					remove_daemon_name(d->name);
-					/* call unregister event function */
-					sf_unregister(d->name);
-				} else {
-					/* if it is not inactive, throw error */
-					fprintf(out, "Daemon %s is not inactive.\n", d->name);
-					sf_error("command execution");
-					fprintf(out, "Error executing command: %s\n", first_arg);
-					free_arr_mem(args_arr, arr_len);
-					continue;
-				}
 			}
+			/* if daemon is registered, check that it is inactive */
+			if(d->status == 1) {
+				/* call unregister event function */
+				sf_unregister(d->name);
+				/* if it is inactive, remove daemon */
+				remove_daemon_name(d->name);
+			} else {
+				/* if it is not inactive, throw error */
+				fprintf(out, "Daemon %s is not inactive.\n", d->name);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			free_arr_mem(args_arr, arr_len);
 		}
 		/* -- invalid arg -- */
 		else {
