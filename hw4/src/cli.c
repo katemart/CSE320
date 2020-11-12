@@ -296,8 +296,9 @@ void run_cli(FILE *in, FILE *out)
 	  	/* if not empty, continue to validate args */
 	  	char *first_arg = args_arr[0];
 	  	/* -- help -- */
-	  	if(strcmp(first_arg, "help") == 0)
+	  	if(strcmp(first_arg, "help") == 0) {
   			fprintf(out, "%s", help_message);
+	  	}
   		/* -- quit -- */
   		else if(strcmp(first_arg, "quit") == 0) {
   			if(arr_len != 1) {
@@ -307,7 +308,7 @@ void run_cli(FILE *in, FILE *out)
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
-			//free_arr_mem(args_arr, arr_len);
+			free_arr_mem(args_arr, arr_len);
 			remove_daemons();
 			break;
 		}
