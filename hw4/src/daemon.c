@@ -70,6 +70,16 @@ void remove_daemon_name(char *d_name) {
 	}
 }
 
+void free_daemon(D_STRUCT *d) {
+	char **words = d->words;
+	while(*words != NULL) {
+		free(*words);
+		words++;
+	}
+	free(d->words);
+	free(d);
+}
+
 /* remove all daemons */
 void remove_daemons()
 {
@@ -77,7 +87,7 @@ void remove_daemons()
    while (head != NULL) {
        temp = head;
        head = head->next;
-       free(temp);
+       free_daemon(temp);
     }
 }
 
