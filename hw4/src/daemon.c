@@ -59,15 +59,16 @@ void free_daemon(D_STRUCT *d) {
 void remove_daemon_name(char *d_name) {
 	if(head != NULL) {
 		D_STRUCT *temp = head;
-		D_STRUCT *prev = NULL;
+		D_STRUCT *prev;
 		/* if current head contains d_name */
 		if(temp != NULL && strcmp(temp->name, d_name) == 0) {
 			/* remove current head and set head's next as new head */
 			head = temp->next;
+			free_daemon(temp);
 			return;
 		}
 		/* while daemon is not found, keep traversing (while setting prev daemon) */
-		while(temp != NULL && (strcmp(temp->name, d_name) != 0)) {
+		while(temp != NULL && strcmp(temp->name, d_name) != 0) {
 			/* set previous to current */
 			prev = temp;
 			/* and set current to next */
