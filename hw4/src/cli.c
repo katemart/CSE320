@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <errno.h>
 #include "daemon.h"
 #include "debug.h"
@@ -39,6 +40,7 @@ static volatile sig_atomic_t sigint_flag = 0;
 /* declare prototypes */
 void alarm_handler(int signum);
 void sigint_handler(int signum);
+int send_term_signal(D_STRUCT *d, int term_sig);
 int create_signal(int signum, sig_handler handler);
 
 /* ------------------------ OTHER HELPER FUNCS ------------------------ */
@@ -179,6 +181,7 @@ int rotate_files(D_STRUCT *d, FILE *out) {
 	if(d->status == 3) {
 		/* call logrotate event function */
 		sf_logrotate(d->name);
+
 	}
 	/* free buffers */
 	free(file_buf);
@@ -268,8 +271,9 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		/* set alarm */
 		alarm(CHILD_TIMEOUT);
 		/* read one-byte */
-		char read_buf[5];
-		if(read(fd[0], &read_buf, 1) != -1) {
+		char read_buf[1];
+		if(read(fd[0], read_buf, 1) > 0) {
+			debug("READ %d", *read_buf);
 			/* cancel alarm */
 			alarm(0);
 			/* set daemon status to active */
@@ -281,11 +285,31 @@ int set_processes(D_STRUCT *d, FILE *out) {
 			/* go back to prompt */
 			return 0;
 		} else {
-			fprintf(out, "Error reading from child");
+			fprintf(out, "Error reading from child\n");
 			return -1;
 		}
 	}
 	return 0;
+}
+
+/* function to update status for reaped children*/
+void update_rchildren() {
+	pid_t c_pid;
+	int w_status;
+	while((c_pid = waitpid(-1, &w_status, WNOHANG | WUNTRACED)) > 0) {
+		D_STRUCT *d = get_daemon_pid(c_pid);
+		if(WIFEXITED(w_status)) {
+			if(d != NULL) {
+				d->status = 5;
+				sf_term(d->name, d->pid, WEXITSTATUS(w_status));
+			}
+		} else if(WIFSIGNALED(w_status)) {
+			if(d != NULL) {
+				d->status = 6;
+				sf_crash(d->name, d->pid, WTERMSIG(w_status));
+			}
+		}
+	}
 }
 
 /* ------------------------ SIGNAL HANDLERS ------------------------ */
@@ -297,13 +321,9 @@ void alarm_handler(int signum) {
 	kill(pid, SIGKILL);
 }
 
-void sigterm_handler(int signum) {
-
-}
-
-void sigchld_handler(int signum) {
-	//pid_t pid;
-
+int send_term_signal(D_STRUCT *d, int term_sig) {
+	kill(d->pid, term_sig);
+	return waitpid(d->pid, NULL, 0);
 }
 
 /* general func to "install" signal handler using sigaction */
@@ -325,7 +345,8 @@ void run_cli(FILE *in, FILE *out)
 	if(create_signal(SIGINT, sigint_handler) < 0) {
 		return;
 	}
-    // TO BE IMPLEMENTED
+	/* call func to update reaped children */
+	update_rchildren();
   	/* prompt loop */
   	while(1) {
   		/* print out prompt */
@@ -438,6 +459,35 @@ void run_cli(FILE *in, FILE *out)
 				continue;
 			}
 			free_arr_mem(args_arr, arr_len);
+		}
+		/* -- stop -- */
+		else if(strcmp(first_arg, "stop") == 0) {
+			D_STRUCT *d = get_daemon_name(args_arr[1]);
+			/* check if daemon is NOT already registered */
+			if(d == NULL) {
+				fprintf(out, "Daemon %s is not registered.\n", args_arr[1]);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			/* if daemon status is exited or crashed, set to inactive  */
+			if(d->status == 5 || d->status == 6)  {
+				d->status = 1;
+				/* call reset event function */
+				sf_reset(d->name);
+			}
+			/* if status is anything other than active, error */
+			else if(d->status != 3) {
+				fprintf(out, "Daemon %s is not active.\n", d->name);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			/* set daemon status to stopping */
+			d->status = 4;
+
 		}
 		/* -- logrotate -- */
 		else if(strcmp(first_arg, "logrotate") == 0) {
