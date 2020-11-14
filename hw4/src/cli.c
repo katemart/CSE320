@@ -37,6 +37,7 @@ typedef void (*sig_handler)(int);
 static volatile pid_t pid = 0;
 static volatile sig_atomic_t alarm_flag = 0;
 static volatile sig_atomic_t sigint_flag = 0;
+static volatile sig_atomic_t sigchld_flag = 0;
 
 /* declare prototypes */
 void update_rchildren();
@@ -358,7 +359,7 @@ int rotate_files(D_STRUCT *d, FILE *out) {
 
 /* ------------------------ SIGNAL HANDLERS ------------------------ */
 void sigchld_handler(int signum) {
-
+	sigchld_flag = 1;
 }
 
 void sigint_handler(int signum) {
