@@ -5,15 +5,17 @@
 #ifndef _GNU_SOURCE
 # define _GNU_SOURCE
 #endif
+
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
-#include "daemon.h"
-#include "debug.h"
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#include "daemon.h"
+#include "debug.h"
+
 #define prompt "legion>"
 #define help_message "Available commands:\n" \
 "help (0 args) Print this help message\n" \
@@ -39,6 +41,7 @@ void alarm_handler(int signum);
 void sigint_handler(int signum);
 int create_signal(int signum, sig_handler handler);
 
+/* ------------------------ OTHER HELPER FUNCS ------------------------ */
 /* function to parse input line args */
 int parse_args(char ***args_arr, int *arr_len, FILE *out) {
   	/* getline */
@@ -126,9 +129,6 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	free(linebuf);
 	/* get actual arr len */
 	*arr_len = args;
-	/*for(int i = 0; i < args; i++) {
-  		fprintf(out, "%s\n", (*args_arr)[i]);
-  	}*/
   	return 0;
 }
 
@@ -140,8 +140,54 @@ void free_arr_mem(char **arr, int arr_len) {
 	free(arr);
 }
 
+/* function to rotate log files */
+int rotate_files(D_STRUCT *d, FILE *out) {
+	/* check if logs dir exists, if not make it */
+	if(mkdir(LOGFILE_DIR, 0777) < 0 && errno != EEXIST) {
+		return -1;
+	}
+	/* create large enough string (+1 for / and +1 for 'num' and +1 for \0) */
+	int file_buf_len = strlen(LOGFILE_DIR) + 1 + strlen(d->name) + strlen(".log.") + 1 + 1;
+	char *file_buf = malloc(file_buf_len);
+	if(file_buf == NULL) return -1;
+	/* unlink max version number file */
+	int f_num = LOG_VERSIONS-1;
+	//debug("%c", f_num);
+	snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (f_num + '0'));
+	//debug("%s", file_buf);
+	/* check if file to be unlinked exists, if so unlink */
+	if(unlink(file_buf) < 0 && errno != ENOENT) {
+		return -1;
+	}
+	//debug("continue");
+	char *temp_buf = strdup(file_buf);
+	if(temp_buf == NULL) return -1;
+	for(int i = f_num-1; i >= 0; i--) {
+		if(i + 1 < LOG_VERSIONS) {
+			snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (i + '0'));
+			snprintf(temp_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, ((i + 1) + '0'));
+			if(rename(file_buf, temp_buf) < 0 && errno != ENOENT) {
+				debug("ERRNO %d", errno);
+				free(file_buf);
+				free(temp_buf);
+				return -1;
+			}
+			//debug("BEFORE %s, AFTER %s", file_buf, temp_buf);
+		}
+	}
+	/* check if daemon is active */
+	if(d->status == 3) {
+		/* call logrotate event function */
+		sf_logrotate(d->name);
+	}
+	/* free buffers */
+	free(file_buf);
+	free(temp_buf);
+	return 0;
+}
+
+/* ------------------------ PROCESSES ------------------------ */
 int set_processes(D_STRUCT *d, FILE *out) {
-	//FILE *fp = fopen("", "ab+");
 	int fd[2];
 	pid_t fork_val;
 	pid_t child_pid;
@@ -163,8 +209,10 @@ int set_processes(D_STRUCT *d, FILE *out) {
 			exit(1);
 		}
 		/* redirect daemon output to file log */
-		char file_buf[20];
-		snprintf(file_buf, 20, "%s/%s.log.%c", LOGFILE_DIR, d->name, '0');
+		/* create large enough string (+1 for / and +1 for 'num' and +1 for \0) */
+		int file_buf_len = strlen(LOGFILE_DIR) + 1 + strlen(d->name) + strlen(".log.") + 1 + 1;
+		char *file_buf = malloc(file_buf_len);
+		snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, '0');
 		//debug("%s", file_buf);
 		FILE *log_fp = fopen(file_buf, "ab+");
 		if(log_fp == NULL) {
@@ -181,6 +229,7 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		/* close child write side once we are done writing */
 		if(close(fd[1]) < 0)
 			exit(1);
+		free(file_buf);
 		/* get PATH env (and check if NULL) */
 		char *old_env = getenv(PATH_ENV_VAR);
 		//debug("%s", old_env);
@@ -239,13 +288,22 @@ int set_processes(D_STRUCT *d, FILE *out) {
 	return 0;
 }
 
-/* signal handlers */
+/* ------------------------ SIGNAL HANDLERS ------------------------ */
 void sigint_handler(int signum) {
 	sigint_flag = 1;
 }
 
 void alarm_handler(int signum) {
 	kill(pid, SIGKILL);
+}
+
+void sigterm_handler(int signum) {
+
+}
+
+void sigchld_handler(int signum) {
+	//pid_t pid;
+
 }
 
 /* general func to "install" signal handler using sigaction */
@@ -257,6 +315,7 @@ int create_signal(int signum, sig_handler handler) {
 	return sigaction(signum, &s_action, NULL);
 }
 
+/* ------------------------ MAIN FUNCTION ------------------------ */
 void run_cli(FILE *in, FILE *out)
 {
 	/* set signal handlers at beginning */
@@ -380,6 +439,25 @@ void run_cli(FILE *in, FILE *out)
 			}
 			free_arr_mem(args_arr, arr_len);
 		}
+		/* -- logrotate -- */
+		else if(strcmp(first_arg, "logrotate") == 0) {
+			D_STRUCT *d = get_daemon_name(args_arr[1]);
+			/* check if daemon is NOT already registered */
+			if(d == NULL) {
+				fprintf(out, "Daemon %s is not registered.\n", args_arr[1]);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			if(rotate_files(d, out) < 0) {
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			free_arr_mem(args_arr, arr_len);
+		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
 			//fprintf(out, "%d\n", arr_len);
@@ -439,10 +517,5 @@ void run_cli(FILE *in, FILE *out)
 			free_arr_mem(args_arr, arr_len);
 			continue;
 		}
-		/* free memory from args_arr */
-		//free_arr_mem(args_arr, arr_len);
   	}
-  	/*for(int i = 0; i < arr_len; i++) {
-  		fprintf(out, "%s\n", args_arr[i]);
-  	}*/
 }
