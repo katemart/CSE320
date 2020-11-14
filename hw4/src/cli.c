@@ -35,11 +35,13 @@ extern char **environ;
 /* vars for signal handling */
 typedef void (*sig_handler)(int);
 static volatile pid_t pid = 0;
+static volatile sig_atomic_t alarm_flag = 0;
 static volatile sig_atomic_t sigint_flag = 0;
 
 /* declare prototypes */
 void alarm_handler(int signum);
 void sigint_handler(int signum);
+void update_rchildren();
 int send_term_signal(D_STRUCT *d, int term_sig);
 int create_signal(int signum, sig_handler handler);
 
@@ -49,9 +51,13 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
   	/* getline */
   	size_t len = 0;
 	char *linebuf = NULL;
+	errno = 0;
   	int linelen = getline(&linebuf, &len, stdin);
   	/* check for EOF */
-  	if(linelen < 0) {
+  	if(linelen < 0 && errno == EINTR) {
+  		clearerr(stdin);
+  	}
+  	else if(linelen < 0) {
   		free(linebuf);
   		fprintf(out, "Error reading command -- giving up.\n");
   		return -1;
@@ -198,9 +204,21 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		fprintf(out, "Error creating pipe\n");
 		return -1;
 	}
+	/* mask */
+	sigset_t new_mask, old_mask;
+	sigemptyset(&new_mask);
+	sigaddset(&new_mask, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &new_mask, &old_mask);
 	/* fork returns child PID to parent and zero to the child */
-	if ((fork_val = fork()) == 0) {
+	fork_val = fork();
+	if(fork_val < 0) {
+		/* if fork fails, set daemon status to inactive */
+		fprintf(out, "Error in fork()\n");
+		d->status = 1;
+		return -1;
+	} else if (fork_val == 0) {
 		/* this is child process */
+		sigprocmask(SIG_SETMASK, &old_mask, NULL);
 		/* set pgid */
 		setpgid(0, 0);
 		/* close child read side since we are writing to parent */
@@ -259,6 +277,7 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		}
 	} else {
 		/* this is parent process */
+		int result = 0;
 		/* set child pid */
 		child_pid = fork_val;
 		//debug("CHILD PID %d", child_pid);
@@ -283,11 +302,16 @@ int set_processes(D_STRUCT *d, FILE *out) {
 			/* close pipe file descriptor */
 			close(fd[0]);
 			/* go back to prompt */
-			return 0;
+			result = 0;
 		} else {
-			fprintf(out, "Error reading from child\n");
-			return -1;
+			//debug("WAS ALARM TRIGGERED? %d", alarm_flag);
+			sf_kill(d->name, d->pid);
+			sigsuspend(&old_mask);
+			update_rchildren();
+			result = -1;
 		}
+		sigprocmask(SIG_SETMASK, &old_mask, NULL);
+		return result;
 	}
 	return 0;
 }
@@ -313,11 +337,16 @@ void update_rchildren() {
 }
 
 /* ------------------------ SIGNAL HANDLERS ------------------------ */
+void sigchld_handler(int signum) {
+
+}
+
 void sigint_handler(int signum) {
 	sigint_flag = 1;
 }
 
 void alarm_handler(int signum) {
+	alarm_flag = 1;
 	kill(pid, SIGKILL);
 }
 
@@ -331,7 +360,7 @@ int create_signal(int signum, sig_handler handler) {
 	struct sigaction s_action;
 	s_action.sa_handler = handler;
 	sigemptyset(&s_action.sa_mask);
-	s_action.sa_flags = SA_RESTART;
+	s_action.sa_flags = 0;
 	return sigaction(signum, &s_action, NULL);
 }
 
@@ -345,10 +374,13 @@ void run_cli(FILE *in, FILE *out)
 	if(create_signal(SIGINT, sigint_handler) < 0) {
 		return;
 	}
-	/* call func to update reaped children */
-	update_rchildren();
+	if(create_signal(SIGCHLD, sigchld_handler) < 0) {
+		return;
+	}
   	/* prompt loop */
   	while(1) {
+  		/* call func to update reaped children */
+		update_rchildren();
   		/* print out prompt */
   		fprintf(out, "%s", prompt);
   		/* flush buffer
