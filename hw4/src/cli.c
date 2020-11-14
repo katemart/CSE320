@@ -52,9 +52,13 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
   	size_t len = 0;
 	char *linebuf = NULL;
 	errno = 0;
+	if(sigint_flag) return -1;
   	int linelen = getline(&linebuf, &len, stdin);
   	/* check for EOF */
-  	if(linelen < 0 && errno == EINTR) {
+  	if(linelen < 0 && errno == EINTR && sigint_flag) {
+  		return -1;
+  	}
+  	else if(linelen < 0 && errno == EINTR) {
   		clearerr(stdin);
   	}
   	else if(linelen < 0) {
