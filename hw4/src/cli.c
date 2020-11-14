@@ -39,9 +39,10 @@ static volatile sig_atomic_t alarm_flag = 0;
 static volatile sig_atomic_t sigint_flag = 0;
 
 /* declare prototypes */
+void update_rchildren();
 void alarm_handler(int signum);
 void sigint_handler(int signum);
-void update_rchildren();
+void sigchld_handler(int signum);
 int send_term_signal(D_STRUCT *d, int term_sig);
 int create_signal(int signum, sig_handler handler);
 
@@ -54,13 +55,15 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	errno = 0;
 	if(sigint_flag) return -1;
   	int linelen = getline(&linebuf, &len, stdin);
-  	/* check for EOF */
+  	/* check for EOF and sigint flag*/
   	if(linelen < 0 && errno == EINTR && sigint_flag) {
   		return -1;
   	}
+  	/* else check for EOF and alarm flag */
   	else if(linelen < 0 && errno == EINTR) {
   		clearerr(stdin);
   	}
+  	/* else check for EOF */
   	else if(linelen < 0) {
   		free(linebuf);
   		fprintf(out, "Error reading command -- giving up.\n");
@@ -150,53 +153,6 @@ void free_arr_mem(char **arr, int arr_len) {
 		free(arr[i]);
 	}
 	free(arr);
-}
-
-/* function to rotate log files */
-int rotate_files(D_STRUCT *d, FILE *out) {
-	/* check if logs dir exists, if not make it */
-	if(mkdir(LOGFILE_DIR, 0777) < 0 && errno != EEXIST) {
-		return -1;
-	}
-	/* create large enough string (+1 for / and +1 for 'num' and +1 for \0) */
-	int file_buf_len = strlen(LOGFILE_DIR) + 1 + strlen(d->name) + strlen(".log.") + 1 + 1;
-	char *file_buf = malloc(file_buf_len);
-	if(file_buf == NULL) return -1;
-	/* unlink max version number file */
-	int f_num = LOG_VERSIONS-1;
-	//debug("%c", f_num);
-	snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (f_num + '0'));
-	//debug("%s", file_buf);
-	/* check if file to be unlinked exists, if so unlink */
-	if(unlink(file_buf) < 0 && errno != ENOENT) {
-		return -1;
-	}
-	//debug("continue");
-	char *temp_buf = strdup(file_buf);
-	if(temp_buf == NULL) return -1;
-	for(int i = f_num-1; i >= 0; i--) {
-		if(i + 1 < LOG_VERSIONS) {
-			snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (i + '0'));
-			snprintf(temp_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, ((i + 1) + '0'));
-			if(rename(file_buf, temp_buf) < 0 && errno != ENOENT) {
-				debug("ERRNO %d", errno);
-				free(file_buf);
-				free(temp_buf);
-				return -1;
-			}
-			//debug("BEFORE %s, AFTER %s", file_buf, temp_buf);
-		}
-	}
-	/* check if daemon is active */
-	if(d->status == 3) {
-		/* call logrotate event function */
-		sf_logrotate(d->name);
-
-	}
-	/* free buffers */
-	free(file_buf);
-	free(temp_buf);
-	return 0;
 }
 
 /* ------------------------ PROCESSES ------------------------ */
@@ -296,7 +252,7 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		/* read one-byte */
 		char read_buf[1];
 		if(read(fd[0], read_buf, 1) > 0) {
-			debug("READ %d", *read_buf);
+			//debug("READ %d", *read_buf);
 			/* cancel alarm */
 			alarm(0);
 			/* set daemon status to active */
@@ -338,6 +294,66 @@ void update_rchildren() {
 			}
 		}
 	}
+}
+
+/* function to rotate log files */
+int rotate_files(D_STRUCT *d, FILE *out) {
+	/* check if logs dir exists, if not make it */
+	if(mkdir(LOGFILE_DIR, 0777) < 0 && errno != EEXIST) {
+		return -1;
+	}
+	/* create large enough string (+1 for / and +1 for 'num' and +1 for \0) */
+	int file_buf_len = strlen(LOGFILE_DIR) + 1 + strlen(d->name) + strlen(".log.") + 1 + 1;
+	char *file_buf = malloc(file_buf_len);
+	if(file_buf == NULL) return -1;
+	/* unlink max version number file */
+	int f_num = LOG_VERSIONS-1;
+	//debug("%c", f_num);
+	snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (f_num + '0'));
+	//debug("%s", file_buf);
+	/* check if file to be unlinked exists, if so unlink */
+	if(unlink(file_buf) < 0 && errno != ENOENT) {
+		return -1;
+	}
+	//debug("continue");
+	char *temp_buf = strdup(file_buf);
+	if(temp_buf == NULL) return -1;
+	for(int i = f_num-1; i >= 0; i--) {
+		if(i + 1 < LOG_VERSIONS) {
+			snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (i + '0'));
+			snprintf(temp_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, ((i + 1) + '0'));
+			if(rename(file_buf, temp_buf) < 0 && errno != ENOENT) {
+				debug("ERRNO %d", errno);
+				free(file_buf);
+				free(temp_buf);
+				return -1;
+			}
+			//debug("BEFORE %s, AFTER %s", file_buf, temp_buf);
+		}
+	}
+	/* check if daemon is active */
+	if(d->status == 3) {
+		/* call logrotate event function */
+		sf_logrotate(d->name);
+		/* stop daemon */
+		if(send_term_signal(d, SIGTERM) < 0) {
+			fprintf(out, "Failed to stop active daemon in logrotate\n");
+			free(file_buf);
+			free(temp_buf);
+			return -1;
+		}
+		/* restart daemon */
+		if(set_processes(d, out) == -1) {
+			fprintf(out, "Failed to restart daemon in logrotate\n");
+			free(file_buf);
+			free(temp_buf);
+			return -1;
+		}
+	}
+	/* free buffers */
+	free(file_buf);
+	free(temp_buf);
+	return 0;
 }
 
 /* ------------------------ SIGNAL HANDLERS ------------------------ */
