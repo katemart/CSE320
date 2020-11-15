@@ -40,11 +40,12 @@ static volatile sig_atomic_t sigint_flag = 0;
 static volatile sig_atomic_t sigchld_flag = 0;
 
 /* declare prototypes */
-void update_rchildren();
+void reap_children();
+void term_all_daemons();
 void alarm_handler(int signum);
 void sigint_handler(int signum);
 void sigchld_handler(int signum);
-int send_term_signal(D_STRUCT *d, int term_sig);
+void send_term_signal(D_STRUCT *d, int term_sig);
 int create_signal(int signum, sig_handler handler);
 
 /* ------------------------ OTHER HELPER FUNCS ------------------------ */
@@ -55,21 +56,26 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	char *linebuf = NULL;
 	errno = 0;
 	if(sigint_flag) return -1;
-  	int linelen = getline(&linebuf, &len, stdin);
-  	/* check for EOF and sigint flag*/
-  	if(linelen < 0 && errno == EINTR && sigint_flag) {
-  		return -1;
-  	}
-  	/* else check for EOF and alarm flag */
-  	else if(linelen < 0 && errno == EINTR) {
-  		clearerr(stdin);
-  	}
-  	/* else check for EOF */
-  	else if(linelen < 0) {
-  		free(linebuf);
-  		fprintf(out, "Error reading command -- giving up.\n");
-  		return -1;
-  	}
+	int linelen;
+	while(1) {
+	  	linelen = getline(&linebuf, &len, stdin);
+	  	/* check for EOF and sigint flag*/
+	  	if(linelen < 0 && errno == EINTR && sigint_flag) {
+	  		term_all_daemons();
+	  		return -1;
+	  	}
+	  	/* else check for EOF and alarm flag */
+	  	else if(linelen < 0 && errno == EINTR) {
+	  		clearerr(stdin);
+	  	}
+	  	/* else check for EOF */
+	  	else if(linelen < 0) {
+	  		free(linebuf);
+	  		term_all_daemons();
+	  		fprintf(out, "Error reading command -- giving up.\n");
+	  		return -1;
+	  	} else break;
+	}
   	/* (dynamically allocated) arr to hold args */
 	/* initial arr size is set to 5 */
 	int n = 5;
@@ -169,7 +175,9 @@ int set_processes(D_STRUCT *d, FILE *out) {
 	sigset_t new_mask, old_mask;
 	sigemptyset(&new_mask);
 	sigaddset(&new_mask, SIGCHLD);
-	sigprocmask(SIG_BLOCK, &new_mask, &old_mask);
+	if(sigprocmask(SIG_BLOCK, &new_mask, &old_mask) < 0) {
+		return -1;
+	}
 	/* fork returns child PID to parent and zero to the child */
 	fork_val = fork();
 	if(fork_val < 0) {
@@ -181,7 +189,9 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		/* this is child process */
 		sigprocmask(SIG_SETMASK, &old_mask, NULL);
 		/* set pgid */
-		setpgid(0, 0);
+		if(setpgid(0, 0) < 0) {
+			exit(1);
+		}
 		/* close child read side since we are writing to parent */
 		close(fd[0]);
 		/* redirect stdout of child process */
@@ -248,6 +258,8 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		pid = child_pid;
 		/* close parent write side since we are reading from child */
 		close(fd[1]);
+		/* reset alarm flag */
+		alarm_flag = 0;
 		/* set alarm */
 		alarm(CHILD_TIMEOUT);
 		/* read one-byte */
@@ -266,35 +278,53 @@ int set_processes(D_STRUCT *d, FILE *out) {
 			result = 0;
 		} else {
 			//debug("WAS ALARM TRIGGERED? %d", alarm_flag);
+			kill(pid, SIGKILL);
 			sf_kill(d->name, d->pid);
 			sigsuspend(&old_mask);
-			update_rchildren();
 			result = -1;
 		}
-		sigprocmask(SIG_SETMASK, &old_mask, NULL);
+		if(sigprocmask(SIG_SETMASK, &old_mask, NULL) < 0) {
+			result = -1;
+		}
 		return result;
 	}
 	return 0;
 }
 
+void update_term(int pid, int w_status) {
+	D_STRUCT *d = get_daemon_pid(pid);
+	if(d != NULL) {
+		d->status = 5;
+		sf_term(d->name, d->pid, WEXITSTATUS(w_status));
+		d->pid = 0;
+	}
+}
+
+void update_crash(int pid, int w_status) {
+	D_STRUCT *d = get_daemon_pid(pid);
+	if(d != NULL) {
+		d->status = 6;
+		sf_crash(d->name, d->pid, WTERMSIG(w_status));
+		d->pid = 0;
+	}
+}
+
+void update_children(int c_pid, int w_status) {
+	if(WIFEXITED(w_status)) {
+		update_term(c_pid, w_status);
+	} else if(WIFSIGNALED(w_status)) {
+		update_crash(c_pid, w_status);
+	}
+}
+
 /* function to update status for reaped children*/
-void update_rchildren() {
+void reap_children() {
 	pid_t c_pid;
 	int w_status;
 	while((c_pid = waitpid(-1, &w_status, WNOHANG | WUNTRACED)) > 0) {
-		D_STRUCT *d = get_daemon_pid(c_pid);
-		if(WIFEXITED(w_status)) {
-			if(d != NULL) {
-				d->status = 5;
-				sf_term(d->name, d->pid, WEXITSTATUS(w_status));
-			}
-		} else if(WIFSIGNALED(w_status)) {
-			if(d != NULL) {
-				d->status = 6;
-				sf_crash(d->name, d->pid, WTERMSIG(w_status));
-			}
-		}
+		update_children(c_pid, w_status);
 	}
+	sigchld_flag = 0;
 }
 
 /* function to rotate log files */
@@ -324,7 +354,7 @@ int rotate_files(D_STRUCT *d, FILE *out) {
 			snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (i + '0'));
 			snprintf(temp_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, ((i + 1) + '0'));
 			if(rename(file_buf, temp_buf) < 0 && errno != ENOENT) {
-				debug("ERRNO %d", errno);
+				//debug("ERRNO %d", errno);
 				free(file_buf);
 				free(temp_buf);
 				return -1;
@@ -337,12 +367,7 @@ int rotate_files(D_STRUCT *d, FILE *out) {
 		/* call logrotate event function */
 		sf_logrotate(d->name);
 		/* stop daemon */
-		if(send_term_signal(d, SIGTERM) < 0) {
-			fprintf(out, "Failed to stop active daemon in logrotate\n");
-			free(file_buf);
-			free(temp_buf);
-			return -1;
-		}
+		send_term_signal(d, SIGTERM);
 		/* restart daemon */
 		if(set_processes(d, out) == -1) {
 			fprintf(out, "Failed to restart daemon in logrotate\n");
@@ -357,6 +382,37 @@ int rotate_files(D_STRUCT *d, FILE *out) {
 	return 0;
 }
 
+int stop_daemon(D_STRUCT *d, FILE *out) {
+	/* reset alarm flag */
+	alarm_flag = 0;
+	/* mask */
+	sigset_t new_mask, old_mask;
+	sigemptyset(&new_mask);
+	sigaddset(&new_mask, SIGCHLD);
+	if(sigprocmask(SIG_BLOCK, &new_mask, &old_mask) < 0) {
+		return -1;
+	}
+	/* set daemon status to stopping */
+	d->status = 4;
+	/* call stop event function */
+	sf_stop(d->name, d->pid);
+	/* send SIGTERM signal */
+	send_term_signal(d, SIGTERM);
+	/*set alarm */
+	alarm(CHILD_TIMEOUT);
+	/* pause Legion with sigsuspend */
+	sigsuspend(&old_mask);
+	/* if time expires and so sigchld notification, send sigkill */
+	if(alarm_flag == 1 && sigchld_flag == 0) {
+		kill(d->pid, SIGKILL);
+		return -1;
+	}
+	if(sigprocmask(SIG_SETMASK, &old_mask, NULL) < 0) {
+		return -1;
+	}
+	return 0;
+}
+
 /* ------------------------ SIGNAL HANDLERS ------------------------ */
 void sigchld_handler(int signum) {
 	sigchld_flag = 1;
@@ -368,12 +424,13 @@ void sigint_handler(int signum) {
 
 void alarm_handler(int signum) {
 	alarm_flag = 1;
-	kill(pid, SIGKILL);
 }
 
-int send_term_signal(D_STRUCT *d, int term_sig) {
+void send_term_signal(D_STRUCT *d, int term_sig) {
 	kill(d->pid, term_sig);
-	return waitpid(d->pid, NULL, 0);
+	int status;
+	pid_t pid = waitpid(d->pid, &status, 0);
+	update_children(pid, status);
 }
 
 /* general func to "install" signal handler using sigaction */
@@ -383,6 +440,15 @@ int create_signal(int signum, sig_handler handler) {
 	sigemptyset(&s_action.sa_mask);
 	s_action.sa_flags = 0;
 	return sigaction(signum, &s_action, NULL);
+}
+
+void term_all_daemons() {
+	D_STRUCT *d = get_head();
+	while(d != NULL) {
+		if(d->pid != 0)
+			send_term_signal(d, SIGTERM);
+		d = d->next;
+	}
 }
 
 /* ------------------------ MAIN FUNCTION ------------------------ */
@@ -401,7 +467,7 @@ void run_cli(FILE *in, FILE *out)
   	/* prompt loop */
   	while(1) {
   		/* call func to update reaped children */
-		update_rchildren();
+		reap_children();
   		/* print out prompt */
   		fprintf(out, "%s", prompt);
   		/* flush buffer
@@ -421,8 +487,6 @@ void run_cli(FILE *in, FILE *out)
   		}
 	  	/* check that args array is not empty */
 	  	if(arr_len <= 0) {
-	  		sf_error("command execution");
-	  		fprintf(out, "Command must be specified.\n");
 	  		free_arr_mem(args_arr, arr_len);
 	  		continue;
 	  	}
@@ -441,6 +505,7 @@ void run_cli(FILE *in, FILE *out)
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
+			term_all_daemons();
 			free_arr_mem(args_arr, arr_len);
 			remove_daemons();
 			break;
@@ -529,18 +594,29 @@ void run_cli(FILE *in, FILE *out)
 				d->status = 1;
 				/* call reset event function */
 				sf_reset(d->name);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
+			/* if status is active, attempt to stop daemon */
+			else if (d->status == 3) {
+				if(stop_daemon(d, out) < 0) {
+					sf_error("command execution");
+					fprintf(out, "Error executing command: %s\n", first_arg);
+					free_arr_mem(args_arr, arr_len);
+					continue;
+				} else {
+					free_arr_mem(args_arr, arr_len);
+					continue;
+				}
 			}
 			/* if status is anything other than active, error */
-			else if(d->status != 3) {
+			else {
 				fprintf(out, "Daemon %s is not active.\n", d->name);
 				sf_error("command execution");
 				fprintf(out, "Error executing command: %s\n", first_arg);
 				free_arr_mem(args_arr, arr_len);
 				continue;
 			}
-			/* set daemon status to stopping */
-			d->status = 4;
-
 		}
 		/* -- logrotate -- */
 		else if(strcmp(first_arg, "logrotate") == 0) {
@@ -616,7 +692,6 @@ void run_cli(FILE *in, FILE *out)
 		else {
 			sf_error("command execution");
 			fprintf(out, "Error executing command: %s\n", first_arg);
-			fprintf(out, "%s", help_message);
 			free_arr_mem(args_arr, arr_len);
 			continue;
 		}
