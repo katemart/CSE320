@@ -50,7 +50,6 @@ int create_signal(int signum, sig_handler handler);
 /* ------------------------ OTHER HELPER FUNCS ------------------------ */
 /* function to parse input line args */
 int parse_args(char ***args_arr, int *arr_len, FILE *out) {
-
 	errno = 0;
   	/* getline */
   	size_t len = 0;
@@ -566,7 +565,7 @@ void run_cli(FILE *in, FILE *out)
 			/* call start event function */
 			sf_start(d->name);
 			/* set daemon status to starting */
-			d->status = 3;
+			d->status = 2;
 			/*start parent and children processes */
 			if(set_processes(d, out) == -1) {
 				sf_error("command execution");
