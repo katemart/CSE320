@@ -389,6 +389,7 @@ int stop_daemon(D_STRUCT *d, FILE *out) {
 	sigset_t new_mask, old_mask;
 	sigemptyset(&new_mask);
 	sigaddset(&new_mask, SIGCHLD);
+	sigaddset(&new_mask, SIGALRM);
 	if(sigprocmask(SIG_BLOCK, &new_mask, &old_mask) < 0) {
 		return -1;
 	}
@@ -396,17 +397,19 @@ int stop_daemon(D_STRUCT *d, FILE *out) {
 	d->status = 4;
 	/* call stop event function */
 	sf_stop(d->name, d->pid);
-	/* send SIGTERM signal */
-	send_term_signal(d, SIGTERM);
+	kill(d->pid, SIGTERM);
 	/*set alarm */
 	alarm(CHILD_TIMEOUT);
 	/* pause Legion with sigsuspend */
 	sigsuspend(&old_mask);
+	/* send SIGTERM signal */
+	//send_term_signal(d, SIGTERM);
 	/* if time expires and so sigchld notification, send sigkill */
 	if(alarm_flag == 1 && sigchld_flag == 0) {
 		kill(d->pid, SIGKILL);
+		sf_kill(d->name, d->pid);
 		return -1;
-	}
+	} else reap_children();
 	if(sigprocmask(SIG_SETMASK, &old_mask, NULL) < 0) {
 		return -1;
 	}
@@ -429,8 +432,11 @@ void alarm_handler(int signum) {
 void send_term_signal(D_STRUCT *d, int term_sig) {
 	kill(d->pid, term_sig);
 	int status;
+	debug("waiting for %s", d->name);
 	pid_t pid = waitpid(d->pid, &status, 0);
-	update_children(pid, status);
+	debug("waited for %s", d->name);
+	if(d->pid > 0)
+		update_children(pid, status);
 }
 
 /* general func to "install" signal handler using sigaction */
