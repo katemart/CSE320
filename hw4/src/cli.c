@@ -34,7 +34,6 @@ extern char **environ;
 
 /* vars for signal handling */
 typedef void (*sig_handler)(int);
-static volatile pid_t pid = 0;
 static volatile sig_atomic_t alarm_flag = 0;
 static volatile sig_atomic_t sigint_flag = 0;
 static volatile sig_atomic_t sigchld_flag = 0;
@@ -254,8 +253,6 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		//debug("CHILD PID %d", child_pid);
 		/* set struct pid value */
 		d->pid = child_pid;
-		/* set global pid */
-		pid = child_pid;
 		/* close parent write side since we are reading from child */
 		close(fd[1]);
 		/* reset alarm flag */
@@ -277,8 +274,7 @@ int set_processes(D_STRUCT *d, FILE *out) {
 			/* go back to prompt */
 			result = 0;
 		} else {
-			//debug("WAS ALARM TRIGGERED? %d", alarm_flag);
-			kill(pid, SIGKILL);
+			kill(child_pid, SIGKILL);
 			sf_kill(d->name, d->pid);
 			sigsuspend(&old_mask);
 			result = -1;
@@ -291,6 +287,7 @@ int set_processes(D_STRUCT *d, FILE *out) {
 	return 0;
 }
 
+/* function to update status for reaped children*/
 void update_term(int pid, int w_status) {
 	D_STRUCT *d = get_daemon_pid(pid);
 	if(d != NULL) {
@@ -300,6 +297,7 @@ void update_term(int pid, int w_status) {
 	}
 }
 
+/* function to update status for reaped children*/
 void update_crash(int pid, int w_status) {
 	D_STRUCT *d = get_daemon_pid(pid);
 	if(d != NULL) {
@@ -309,6 +307,7 @@ void update_crash(int pid, int w_status) {
 	}
 }
 
+/* function to update status for reaped children*/
 void update_children(int c_pid, int w_status) {
 	if(WIFEXITED(w_status)) {
 		update_term(c_pid, w_status);
@@ -325,61 +324,6 @@ void reap_children() {
 		update_children(c_pid, w_status);
 	}
 	sigchld_flag = 0;
-}
-
-/* function to rotate log files */
-int rotate_files(D_STRUCT *d, FILE *out) {
-	/* check if logs dir exists, if not make it */
-	if(mkdir(LOGFILE_DIR, 0777) < 0 && errno != EEXIST) {
-		return -1;
-	}
-	/* create large enough string (+1 for / and +1 for 'num' and +1 for \0) */
-	int file_buf_len = strlen(LOGFILE_DIR) + 1 + strlen(d->name) + strlen(".log.") + 1 + 1;
-	char *file_buf = malloc(file_buf_len);
-	if(file_buf == NULL) return -1;
-	/* unlink max version number file */
-	int f_num = LOG_VERSIONS-1;
-	//debug("%c", f_num);
-	snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (f_num + '0'));
-	//debug("%s", file_buf);
-	/* check if file to be unlinked exists, if so unlink */
-	if(unlink(file_buf) < 0 && errno != ENOENT) {
-		return -1;
-	}
-	//debug("continue");
-	char *temp_buf = strdup(file_buf);
-	if(temp_buf == NULL) return -1;
-	for(int i = f_num-1; i >= 0; i--) {
-		if(i + 1 < LOG_VERSIONS) {
-			snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (i + '0'));
-			snprintf(temp_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, ((i + 1) + '0'));
-			if(rename(file_buf, temp_buf) < 0 && errno != ENOENT) {
-				//debug("ERRNO %d", errno);
-				free(file_buf);
-				free(temp_buf);
-				return -1;
-			}
-			//debug("BEFORE %s, AFTER %s", file_buf, temp_buf);
-		}
-	}
-	/* check if daemon is active */
-	if(d->status == 3) {
-		/* call logrotate event function */
-		sf_logrotate(d->name);
-		/* stop daemon */
-		send_term_signal(d, SIGTERM);
-		/* restart daemon */
-		if(set_processes(d, out) == -1) {
-			fprintf(out, "Failed to restart daemon in logrotate\n");
-			free(file_buf);
-			free(temp_buf);
-			return -1;
-		}
-	}
-	/* free buffers */
-	free(file_buf);
-	free(temp_buf);
-	return 0;
 }
 
 int stop_daemon(D_STRUCT *d, FILE *out) {
@@ -413,6 +357,59 @@ int stop_daemon(D_STRUCT *d, FILE *out) {
 	if(sigprocmask(SIG_SETMASK, &old_mask, NULL) < 0) {
 		return -1;
 	}
+	/* set status to inactive */
+	d->status = 1;
+	return 0;
+}
+
+/* function to rotate log files */
+int rotate_files(D_STRUCT *d, FILE *out) {
+	/* check if logs dir exists, if not make it */
+	if(mkdir(LOGFILE_DIR, 0777) < 0 && errno != EEXIST) {
+		return -1;
+	}
+	/* create large enough string (+1 for / and +1 for 'num' and +1 for \0) */
+	int file_buf_len = strlen(LOGFILE_DIR) + 1 + strlen(d->name) + strlen(".log.") + 1 + 1;
+	char *file_buf = malloc(file_buf_len);
+	if(file_buf == NULL) return -1;
+	/* unlink max version number file */
+	int f_num = LOG_VERSIONS-1;
+	snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (f_num + '0'));
+	/* check if file to be unlinked exists, if so unlink */
+	if(unlink(file_buf) < 0 && errno != ENOENT) {
+		return -1;
+	}
+	char *temp_buf = strdup(file_buf);
+	if(temp_buf == NULL) return -1;
+	for(int i = f_num-1; i >= 0; i--) {
+		if(i + 1 < LOG_VERSIONS) {
+			snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (i + '0'));
+			snprintf(temp_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, ((i + 1) + '0'));
+			if(rename(file_buf, temp_buf) < 0 && errno != ENOENT) {
+				free(file_buf);
+				free(temp_buf);
+				return -1;
+			}
+		}
+	}
+	/* check if daemon is active */
+	if(d->status == 3) {
+		/* call logrotate event function */
+		sf_logrotate(d->name);
+		/* stop daemon */
+		//send_term_signal(d, SIGTERM);
+		stop_daemon(d, out);
+		/* restart daemon */
+		if(set_processes(d, out) == -1) {
+			fprintf(out, "Failed to restart daemon in logrotate\n");
+			free(file_buf);
+			free(temp_buf);
+			return -1;
+		}
+	}
+	/* free buffers */
+	free(file_buf);
+	free(temp_buf);
 	return 0;
 }
 
@@ -432,9 +429,7 @@ void alarm_handler(int signum) {
 void send_term_signal(D_STRUCT *d, int term_sig) {
 	kill(d->pid, term_sig);
 	int status;
-	debug("waiting for %s", d->name);
 	pid_t pid = waitpid(d->pid, &status, 0);
-	debug("waited for %s", d->name);
 	if(d->pid > 0)
 		update_children(pid, status);
 }
@@ -565,7 +560,7 @@ void run_cli(FILE *in, FILE *out)
 			 * i.e., if current status is anything other than inactive then error
 			 */
 			if(d->status != 1) {
-				fprintf(out, "Daemon %s is already active.\n", d->name);
+				fprintf(out, "Daemon %s is not inactive.\n", d->name);
 				sf_error("command execution");
 				fprintf(out, "Error executing command: %s\n", first_arg);
 				free_arr_mem(args_arr, arr_len);
