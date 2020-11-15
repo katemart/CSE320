@@ -442,8 +442,10 @@ int create_signal(int signum, sig_handler handler) {
 void term_all_daemons() {
 	D_STRUCT *d = get_head();
 	while(d != NULL) {
-		if(d->pid != 0)
+		if(d->pid != 0) {
+			sf_stop(d->name, d->pid);
 			send_term_signal(d, SIGTERM);
+		}
 		d = d->next;
 	}
 }
