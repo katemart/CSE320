@@ -2,8 +2,7 @@
 #include <string.h>
 
 static D_STRUCT *head;
-char *d_status[] = {"unknown", "inactive", "starting", "active",
-					"stopping","exited", "crashed"};
+char *d_status[] = {"unknown", "inactive", "starting", "active", "stopping","exited", "crashed"};
 
 /* add daemon to list */
 void add_daemon(D_STRUCT *daemon) {
@@ -114,6 +113,7 @@ void print_daemons(FILE *out) {
 	}
 }
 
+/* return head of list */
 D_STRUCT *get_head() {
 	if(head != NULL)
 		return head;
