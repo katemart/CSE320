@@ -50,14 +50,18 @@ int create_signal(int signum, sig_handler handler);
 /* ------------------------ OTHER HELPER FUNCS ------------------------ */
 /* function to parse input line args */
 int parse_args(char ***args_arr, int *arr_len, FILE *out) {
+
+	errno = 0;
   	/* getline */
   	size_t len = 0;
 	char *linebuf = NULL;
-	errno = 0;
 	if(sigint_flag) return -1;
 	int linelen;
+
 	while(1) {
+
 	  	linelen = getline(&linebuf, &len, stdin);
+	  	//debug("IS EINTR %d, IS EOF %d", (errno==EINTR), (linelen<0));
 	  	/* check for EOF and sigint flag*/
 	  	if(linelen < 0 && errno == EINTR && sigint_flag) {
 	  		term_all_daemons();
@@ -241,9 +245,7 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		//debug("%s", getenv(PATH_ENV_VAR));
 		/* use execvpe to execute command registered for the daemon */
 		if(execvpe(d->command[0], d->command, environ) < 0) {
-			sf_error("command execution");
-			fprintf(out, "Error executing command: %s\n", d->name);
-			exit(1);
+			abort();
 		}
 	} else {
 		/* this is parent process */
@@ -277,6 +279,8 @@ int set_processes(D_STRUCT *d, FILE *out) {
 			kill(child_pid, SIGKILL);
 			sf_kill(d->name, d->pid);
 			sigsuspend(&old_mask);
+			//reap_children();
+			close(fd[0]);
 			result = -1;
 		}
 		if(sigprocmask(SIG_SETMASK, &old_mask, NULL) < 0) {
@@ -301,9 +305,9 @@ void update_term(int pid, int w_status) {
 void update_crash(int pid, int w_status) {
 	D_STRUCT *d = get_daemon_pid(pid);
 	if(d != NULL) {
+		d->pid = 0;
 		d->status = 6;
 		sf_crash(d->name, d->pid, WTERMSIG(w_status));
-		d->pid = 0;
 	}
 }
 
