@@ -57,13 +57,11 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
 	char *linebuf = NULL;
 	if(sigint_flag) return -1;
 	int linelen;
-
 	while(1) {
-
 	  	linelen = getline(&linebuf, &len, stdin);
-	  	//debug("IS EINTR %d, IS EOF %d", (errno==EINTR), (linelen<0));
 	  	/* check for EOF and sigint flag*/
 	  	if(linelen < 0 && errno == EINTR && sigint_flag) {
+	  		free(linebuf);
 	  		term_all_daemons();
 	  		return -1;
 	  	}
@@ -208,7 +206,6 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		int file_buf_len = strlen(LOGFILE_DIR) + 1 + strlen(d->name) + strlen(".log.") + 1 + 1;
 		char *file_buf = malloc(file_buf_len);
 		snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, '0');
-		//debug("%s", file_buf);
 		FILE *log_fp = fopen(file_buf, "ab+");
 		if(log_fp == NULL) {
 			fprintf(out, "Error creating log file\n");
@@ -227,7 +224,6 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		free(file_buf);
 		/* get PATH env (and check if NULL) */
 		char *old_env = getenv(PATH_ENV_VAR);
-		//debug("%s", old_env);
 		size_t old_env_len = old_env == NULL ? 0 : strlen(old_env);
 		/* create large enough string (+1 for : and +1 for \0) */
 		char *new_path = malloc(strlen(DAEMONS_DIR) + 1 + old_env_len + 1);
@@ -242,7 +238,6 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		/* set new PATH env */
 		setenv(PATH_ENV_VAR, new_path, 1);
 		free(new_path);
-		//debug("%s", getenv(PATH_ENV_VAR));
 		/* use execvpe to execute command registered for the daemon */
 		if(execvpe(d->command[0], d->command, environ) < 0) {
 			abort();
@@ -252,7 +247,6 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		int result = 0;
 		/* set child pid */
 		child_pid = fork_val;
-		//debug("CHILD PID %d", child_pid);
 		/* set struct pid value */
 		d->pid = child_pid;
 		/* close parent write side since we are reading from child */
@@ -264,7 +258,6 @@ int set_processes(D_STRUCT *d, FILE *out) {
 		/* read one-byte */
 		char read_buf[1];
 		if(read(fd[0], read_buf, 1) > 0) {
-			//debug("READ %d", *read_buf);
 			/* cancel alarm */
 			alarm(0);
 			/* set daemon status to active */
@@ -279,7 +272,6 @@ int set_processes(D_STRUCT *d, FILE *out) {
 			kill(child_pid, SIGKILL);
 			sf_kill(d->name, d->pid);
 			sigsuspend(&old_mask);
-			//reap_children();
 			close(fd[0]);
 			result = -1;
 		}
@@ -351,7 +343,6 @@ int stop_daemon(D_STRUCT *d, FILE *out) {
 	/* pause Legion with sigsuspend */
 	sigsuspend(&old_mask);
 	/* send SIGTERM signal */
-	//send_term_signal(d, SIGTERM);
 	/* if time expires and so sigchld notification, send sigkill */
 	if(alarm_flag == 1 && sigchld_flag == 0) {
 		kill(d->pid, SIGKILL);
@@ -381,6 +372,7 @@ int rotate_files(D_STRUCT *d, FILE *out) {
 	snprintf(file_buf, file_buf_len, "%s/%s.log.%c", LOGFILE_DIR, d->name, (f_num + '0'));
 	/* check if file to be unlinked exists, if so unlink */
 	if(unlink(file_buf) < 0 && errno != ENOENT) {
+		free(file_buf);
 		return -1;
 	}
 	char *temp_buf = strdup(file_buf);
@@ -401,7 +393,6 @@ int rotate_files(D_STRUCT *d, FILE *out) {
 		/* call logrotate event function */
 		sf_logrotate(d->name);
 		/* stop daemon */
-		//send_term_signal(d, SIGTERM);
 		stop_daemon(d, out);
 		/* restart daemon */
 		if(set_processes(d, out) == -1) {
@@ -447,6 +438,7 @@ int create_signal(int signum, sig_handler handler) {
 	return sigaction(signum, &s_action, NULL);
 }
 
+/* function to terminate all processes */
 void term_all_daemons() {
 	D_STRUCT *d = get_head();
 	while(d != NULL) {
@@ -459,7 +451,7 @@ void term_all_daemons() {
 /* ------------------------ MAIN FUNCTION ------------------------ */
 void run_cli(FILE *in, FILE *out)
 {
-	/* set signal handlers at beginning */
+	/* install signal handlers at beginning */
 	if(create_signal(SIGALRM, alarm_handler) < 0) {
 		return;
 	}
@@ -535,7 +527,6 @@ void run_cli(FILE *in, FILE *out)
 			d->status = 1;
 			d->command = args_arr + 2;
 			d->words = args_arr;
-			//debug("%s", d->command[0]);
 			/* check if daemon is already registered */
 			if(get_daemon_name(d->name) != NULL) {
 				fprintf(out, "Daemon %s is already registered.\n", d->name);
@@ -644,7 +635,6 @@ void run_cli(FILE *in, FILE *out)
 		}
 		/* -- status -- */
 		else if(strcmp(first_arg, "status") == 0) {
-			//fprintf(out, "%d\n", arr_len);
 			if(arr_len != 2) {
 				fprintf(out, "Wrong number of args (given: %d, required: 1) for command 'status'\n", arr_len-1);
 				sf_error("command execution");
