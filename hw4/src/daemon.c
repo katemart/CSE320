@@ -45,6 +45,7 @@ D_STRUCT *get_daemon_pid(int d_pid) {
 	return NULL;
 }
 
+/* custom "free" function for daemon */
 void free_daemon(D_STRUCT *d) {
 	char **words = d->words;
 	while(*words != NULL) {
@@ -55,7 +56,7 @@ void free_daemon(D_STRUCT *d) {
 	free(d);
 }
 
-/* remove daemon from list note: might need two vars */
+/* remove daemon from list */
 void remove_daemon_name(char *d_name) {
 	if(head != NULL) {
 		D_STRUCT *temp = head;
@@ -81,7 +82,7 @@ void remove_daemon_name(char *d_name) {
 	}
 }
 
-/* remove all daemons */
+/* remove all daemons in list */
 void remove_daemons()
 {
    D_STRUCT *temp;
@@ -92,6 +93,7 @@ void remove_daemons()
     }
 }
 
+/* print status for registered daemon */
 void print_daemon(FILE *out, char *d_name) {
 	if(head != NULL) {
 		D_STRUCT *curr = get_daemon_name(d_name);
@@ -110,4 +112,10 @@ void print_daemons(FILE *out) {
 			curr = curr->next;
 		}
 	}
+}
+
+D_STRUCT *get_head() {
+	if(head != NULL)
+		return head;
+	return NULL;
 }

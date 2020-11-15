@@ -21,10 +21,11 @@ D_STRUCT *get_daemon_name(char *d_name);
 /* get daemon from list using PID */
 D_STRUCT *get_daemon_pid(int pid);
 
+/* custom "free" function for daemon */
+void free_daemon(D_STRUCT *d);
+
 /* remove daemon from list */
 void remove_daemon_name(char *d_name);
-
-void free_daemon(D_STRUCT *d);
 
 /* remove all daemons in list */
 void remove_daemons();
@@ -34,5 +35,8 @@ void print_daemon(FILE *out, char *d_name);
 
 /* iterate through daemons */
 void print_daemons(FILE *out);
+
+/* return head of list */
+D_STRUCT *get_head();
 
 #endif
