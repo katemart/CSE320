@@ -120,6 +120,7 @@ int parse_args(char ***args_arr, int *arr_len, FILE *out) {
 			return -1;
 		}
 		arrbuf = str + 1;
+		if(*arrbuf == '\n' || *arrbuf == '\0') break;
 		/* account for spaces */
 		while(*arrbuf && (*arrbuf == ' '))
 			arrbuf++;
