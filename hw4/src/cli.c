@@ -493,6 +493,7 @@ void run_cli(FILE *in, FILE *out)
 	  	/* -- help -- */
 	  	if(strcmp(first_arg, "help") == 0) {
   			fprintf(out, "%s", help_message);
+  			free_arr_mem(args_arr, arr_len);
 	  	}
   		/* -- quit -- */
   		else if(strcmp(first_arg, "quit") == 0) {
@@ -543,6 +544,13 @@ void run_cli(FILE *in, FILE *out)
 		}
 		/* -- start -- */
 		else if(strcmp(first_arg, "start") == 0) {
+			if(arr_len  != 2) {
+				fprintf(out, "Wrong number of args (given: %d, required: 1) for command 'start'\n", arr_len-1);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
 			D_STRUCT *d = get_daemon_name(args_arr[1]);
 			/* check if daemon is NOT already registered */
 			if(d == NULL) {
@@ -577,6 +585,13 @@ void run_cli(FILE *in, FILE *out)
 		}
 		/* -- stop -- */
 		else if(strcmp(first_arg, "stop") == 0) {
+			if(arr_len  != 2) {
+				fprintf(out, "Wrong number of args (given: %d, required: 1) for command 'stop'\n", arr_len-1);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
 			D_STRUCT *d = get_daemon_name(args_arr[1]);
 			/* check if daemon is NOT already registered */
 			if(d == NULL) {
@@ -617,6 +632,13 @@ void run_cli(FILE *in, FILE *out)
 		}
 		/* -- logrotate -- */
 		else if(strcmp(first_arg, "logrotate") == 0) {
+			if(arr_len != 2) {
+				fprintf(out, "Wrong number of args (given: %d, required: 1) for command 'logrotate'\n", arr_len-1);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
 			D_STRUCT *d = get_daemon_name(args_arr[1]);
 			/* check if daemon is NOT already registered */
 			if(d == NULL) {
@@ -659,6 +681,13 @@ void run_cli(FILE *in, FILE *out)
 		}
 		/* -- unregister -- */
 		else if(strcmp(first_arg, "unregister") == 0) {
+			if(arr_len  != 2) {
+				fprintf(out, "Wrong number of args (given: %d, required: 1) for command 'unregister'\n", arr_len-1);
+				sf_error("command execution");
+				fprintf(out, "Error executing command: %s\n", first_arg);
+				free_arr_mem(args_arr, arr_len);
+				continue;
+			}
 			D_STRUCT *d = get_daemon_name(args_arr[1]);
 			/* check if daemon is NOT already registered */
 			if(d == NULL) {
