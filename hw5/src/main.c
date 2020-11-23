@@ -22,8 +22,10 @@ int _debug_packets_ = 1;
 #endif
 
 static void terminate(int status);
+static volatile sig_atomic_t sighup_flag = 0;
+
 static void sighup_handler(int sig) {
-    terminate(0);
+    sighup_flag = 1;
 }
 
 /*
@@ -87,6 +89,7 @@ int main(int argc, char* argv[]){
             exit(1);
         }
         Pthread_create(&tid, NULL, jeux_client_service, conn_fd);
+        if(sighup_flag) terminate(0);
     }
 
     /*fprintf(stderr, "You have to finish implementing main() "
