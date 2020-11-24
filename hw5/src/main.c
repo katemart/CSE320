@@ -81,7 +81,7 @@ int main(int argc, char* argv[]){
     /* attempt to start server */
     if((listen_fd = open_listenfd(port_num)) < 0) {
         fprintf(stderr, "open_listenfd error\n");
-        exit(EXIT_FAILURE);
+        terminate(EXIT_FAILURE);
     }
     debug("Jeux server listening on port %s", port_num);
     while(1) {
@@ -89,19 +89,26 @@ int main(int argc, char* argv[]){
         conn_fd = malloc(sizeof(int));
         if(conn_fd == NULL) {
             fprintf(stderr, "conn_fd malloc error\n");
-            exit(EXIT_FAILURE);
+            terminate(EXIT_FAILURE);
         }
         if((*conn_fd = accept(listen_fd, (SA *)&client_addr, &client_len)) < 0) {
             /* check for SIGHUP */
-            if(sighup_flag)
+            if(sighup_flag) {
+                free(conn_fd);
+                close(listen_fd);
+                fprintf(stderr, "SIGHUP caught\n");
                 terminate(EXIT_SUCCESS);
+            }
             /* if not SIGHUP, something else went wrong */
+            free(conn_fd);
+            close(listen_fd);
             fprintf(stderr, "conn_fd accept error\n");
-            exit(EXIT_FAILURE);
+            terminate(EXIT_FAILURE);
         }
         Pthread_create(&tid, NULL, jeux_client_service, conn_fd);
     }
-    exit(EXIT_SUCCESS);
+    close(listen_fd);
+    terminate(EXIT_SUCCESS);
 }
 
 /*
