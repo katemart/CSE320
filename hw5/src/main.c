@@ -44,7 +44,6 @@ int main(int argc, char* argv[]){
     socklen_t client_len;
     struct sockaddr_storage client_addr;
     pthread_t tid;
-    //sighup_flag = 0;
 
     /* check that the given args is the right number */
     if(argc != 3) {
@@ -94,8 +93,9 @@ int main(int argc, char* argv[]){
         }
         if((*conn_fd = accept(listen_fd, (SA *)&client_addr, &client_len)) < 0) {
             /* check for SIGHUP */
-            if(sighup_flag) terminate(EXIT_SUCCESS);
-            /* if not sIGHUP, something else went wrong */
+            if(sighup_flag)
+                terminate(EXIT_SUCCESS);
+            /* if not SIGHUP, something else went wrong */
             fprintf(stderr, "conn_fd accept error\n");
             exit(EXIT_FAILURE);
         }
