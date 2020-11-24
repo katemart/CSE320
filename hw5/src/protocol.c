@@ -11,14 +11,14 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 	/* attempt to send data */
 	bytes_sent = rio_writen(fd, hdr, sizeof(JEUX_PACKET_HEADER));
 	if(bytes_sent < 0) {
-		debug("rio_writen header error\n");
+		debug("rio_writen header error");
 		return -1;
 	}
 	/* check if packet has payload */
 	if(hdr->size > 0) {
 		bytes_sent = rio_writen(fd, data, hdr->size);
 		if(bytes_sent < 0) {
-			debug("rio_writen payload error\n");
+			debug("rio_writen payload error");
 			return -1;
 		}
 	}
@@ -41,12 +41,12 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 	if(hdr->size > 0) {
 		*payloadp = malloc(hdr->size);
 		if(*payloadp == NULL) {
-			debug("rio_readn payload malloc error\n");
+			debug("rio_readn payload malloc error");
 			return -1;
 		}
 		bytes_rcvd = rio_readn(fd, *payloadp, hdr->size);
 		if(bytes_rcvd <= 0) {
-			debug("rio_readn payload error\n");
+			debug("rio_readn payload error");
 			return -1;
 		}
 	}
