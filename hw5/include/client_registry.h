@@ -60,10 +60,9 @@ void creg_fini(CLIENT_REGISTRY *cr);
 /*
  * Register a client file descriptor.
  * If successful, returns a reference to the the newly registered CLIENT,
- * otherwise NULL.  The returned CLIENT has a reference count of two:
- * one count is for the reference held by the registry itself for as long
- * as the client remains connected and the other is for the reference
- * that is returned.
+ * otherwise NULL.  The returned CLIENT has a reference count of one;
+ * this corresponds to the reference held by the registry itself for as
+ * long as the client remains connected.
  *
  * @param cr  The client registry.
  * @param fd  The file descriptor to be registered.
@@ -106,9 +105,9 @@ CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user);
  * responsibility to decrement the reference count of each of the
  * entries and to free the array when it is no longer needed.
  *
- * @param cr  The registry for which the set of usernames is to be
+ * @param cr  The registry for which the set of players is to be
  * obtained.
- * @return the list of usernames as a NULL-terminated array of strings.
+ * @return the list of players.
  */
 PLAYER **creg_all_players(CLIENT_REGISTRY *cr);
 
