@@ -76,14 +76,14 @@ int main(int argc, char* argv[]){
     s_action.sa_flags = 0;
     if (sigaction(SIGHUP, &s_action, NULL) == -1) {
         fprintf(stderr, "SIGHUP error\n");
-        exit(EXIT_FAILURE);
+        terminate(EXIT_FAILURE);
     }
     /* attempt to start server */
     if((listen_fd = open_listenfd(port_num)) < 0) {
         fprintf(stderr, "open_listenfd error\n");
         terminate(EXIT_FAILURE);
     }
-    debug("Jeux server listening on port %s", port_num);
+    //debug("Jeux server listening on port %s", port_num);
     while(1) {
         client_len = sizeof(struct sockaddr_storage);
         conn_fd = malloc(sizeof(int));
@@ -95,19 +95,28 @@ int main(int argc, char* argv[]){
             /* check for SIGHUP */
             if(sighup_flag) {
                 free(conn_fd);
-                close(listen_fd);
+                if(close(listen_fd) < 0) {
+                    fprintf(stderr, "close listen_fd error");
+                    terminate(EXIT_FAILURE);
+                }
                 fprintf(stderr, "SIGHUP caught\n");
                 terminate(EXIT_SUCCESS);
             }
             /* if not SIGHUP, something else went wrong */
             free(conn_fd);
-            close(listen_fd);
+            if(close(listen_fd) < 0) {
+                fprintf(stderr, "close listen_fd error");
+                terminate(EXIT_FAILURE);
+            }
             fprintf(stderr, "conn_fd accept error\n");
             terminate(EXIT_FAILURE);
         }
         Pthread_create(&tid, NULL, jeux_client_service, conn_fd);
     }
-    close(listen_fd);
+    if(close(listen_fd) < 0) {
+        fprintf(stderr, "close listen_fd error");
+        terminate(EXIT_FAILURE);
+    }
     terminate(EXIT_SUCCESS);
 }
 
