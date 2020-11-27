@@ -111,7 +111,10 @@ int main(int argc, char* argv[]){
             fprintf(stderr, "conn_fd accept error\n");
             terminate(EXIT_FAILURE);
         }
-        Pthread_create(&tid, NULL, jeux_client_service, conn_fd);
+        if(pthread_create(&tid, NULL, jeux_client_service, conn_fd) != 0) {
+            fprintf(stderr, "pthread_create error\n");
+            terminate(EXIT_FAILURE);
+        }
     }
     if(close(listen_fd) < 0) {
         fprintf(stderr, "close listen_fd error");
