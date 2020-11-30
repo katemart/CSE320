@@ -73,7 +73,6 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
 	}
 	/* increment client count by one */
 	cr->num_clients++;
-	client_ref(client, "increase ref count due to client registration");
 	/* add client to list */
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		if(cr->c_list[i] == NULL) {
@@ -100,7 +99,7 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 		debug("pthread_mutex_lock error");
 		return -1;
 	}
-	/* if the num of client refs is <= zero then error unregistering */
+	/* if the num of clients is <= zero then error unregistering */
 	if(cr->num_clients <= 0) {
 		if(pthread_mutex_unlock(&cr->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
@@ -109,21 +108,21 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 	}
 	/* search for client to unregister */
 	for(int i = 0; i < MAX_CLIENTS; i++) {
-		/* if client is found, remove from list */
+		 /* if client is found, remove from list */
 		if(cr->c_list[i] == client) {
 			cr->c_list[i] = NULL;
+			/* decrement client count by one */
+			cr->num_clients--;
+			client_unref(client, "decrease count due to client unregistration");
 			break;
 		} else {
-			/* else*/
+			/* else unlock mutex and return -1 */
 			if(pthread_mutex_unlock(&cr->mutex) != 0) {
 				debug("pthread_mutex_unlock error");
 			}
 			return -1;
 		}
 	}
-	/* decrement client count by one */
-	cr->num_clients--;
-	client_unref(client, "decrease count due to client unregistration");
 	debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(), client_get_fd(client), cr->num_clients);
 	/* if the num of clients is > zero, take the "marble" */
 	if(cr->num_clients > 0) {
@@ -145,16 +144,23 @@ CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
 	}
 	/* search through each client registered */
 	for(int i = 0; i < MAX_CLIENTS; i++) {
-		/* if a client with that username is found, return it */
 		if(cr->c_list[i] != NULL) {
-			if(strcmp(player_get_name(client_get_player(cr->c_list[i])), user) == 0) {
+			PLAYER *p = client_get_player(cr->c_list[i]);
+			/* if there is no player, return NULL */
+			if(p == NULL) {
+				break;
+			}
+			/* if there is a player, get the player's username */
+			char *name = player_get_name(p);
+			/* if a client with that username is found, return it */
+			if(strcmp(name, user) == 0) {
 				client = cr->c_list[i];
+				/* increment client ref count by one */
+				client_ref(client, "increase ref count due to client lookup");
 				break;
 			}
 		}
 	}
-	/* increment client ref count by one */
-	client_ref(client, "increase ref count due to client lookup");
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&cr->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
@@ -170,8 +176,8 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
 		debug("pthread_mutex_lock error");
 		return NULL;
 	}
-	/* allocate space for the player list */
-	p_list = malloc(cr->num_clients * sizeof(PLAYER *));
+	/* allocate space for the player list (including NULL mark at end) */
+	p_list = malloc((cr->num_clients + 1) * sizeof(PLAYER *));
 	if(p_list == NULL) {
 		debug("error allocating space for player list");
 		return NULL;
@@ -184,9 +190,13 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
 			/* if player is logged-in (aka not NULL), add it to the array*/
 			if(p != NULL) {
 				p_list[i] = p;
+				/* increase player ref count */
+				player_ref(p, "increase ref due to player being added to list of players");
 			}
 		}
 	}
+	/* set NULL pointer marking end of array */
+	p_list[cr->num_clients] = NULL;
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&cr->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
