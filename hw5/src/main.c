@@ -83,7 +83,7 @@ int main(int argc, char* argv[]){
         fprintf(stderr, "open_listenfd error\n");
         terminate(EXIT_FAILURE);
     }
-    //debug("Jeux server listening on port %s", port_num);
+    debug("%lu: Jeux server listening on port %s", pthread_self(), port_num);
     while(1) {
         client_len = sizeof(struct sockaddr_storage);
         conn_fd = malloc(sizeof(int));
