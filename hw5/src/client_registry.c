@@ -111,6 +111,7 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 		 /* if client is found, remove from list */
 		if(cr->c_list[i] == client) {
 			cr->c_list[i] = NULL;
+			debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(), client_get_fd(client), cr->num_clients);
 			/* decrement client count by one */
 			cr->num_clients--;
 			client_unref(client, "decrease count due to client unregistration");
@@ -123,7 +124,6 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 			return -1;
 		}
 	}
-	debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(), client_get_fd(client), cr->num_clients);
 	/* if the num of clients is > zero, take the "marble" */
 	if(cr->num_clients > 0) {
 		P(&cr->sem);
