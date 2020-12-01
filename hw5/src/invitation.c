@@ -33,15 +33,17 @@ INVITATION *inv_create(CLIENT *source, CLIENT *target, GAME_ROLE source_role, GA
 	}
 	/* else set invitation fields */
 	invitation->game = NULL;
-	invitation->ref_count = 1;
+	invitation->ref_count = 0;
 	invitation->source = source;
 	invitation->target = target;
 	invitation->s_role = source_role;
 	invitation->t_role = target_role;
 	invitation->state = INV_OPEN_STATE;
 	/* increment client ref counts */
-	client_ref(source, "increase ref count due to source invitation");
-	client_ref(target, "increase ref count due to target invitation");
+	client_ref(invitation->source, "as source of new invitation");
+	client_ref(invitation->target, "as target of new invitation");
+	/* increment inv ref count */
+	inv_ref(invitation, "for newly created invitation");
 	/* init mutex*/
 	if(pthread_mutex_init(&invitation->mutex, NULL) != 0) {
 		free(invitation);
@@ -57,14 +59,16 @@ INVITATION *inv_ref(INVITATION *inv, char *why) {
 		debug("pthread_mutex_lock error");
 		return NULL;
 	}
-	inv->ref_count++;
-	debug("%s", why);
-	return inv;
+	int prev_ref_count = inv->ref_count;
+	inv->ref_count = inv->ref_count + 1;
+	debug("%lu: Increase reference count on invitation %p (%d -> %d) %s",
+		pthread_self(), inv, prev_ref_count, inv->ref_count, why);
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&inv->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
 		return NULL;
 	}
+	return inv;
 }
 
 void inv_unref(INVITATION *inv, char *why) {
@@ -72,8 +76,10 @@ void inv_unref(INVITATION *inv, char *why) {
 	if(pthread_mutex_lock(&inv->mutex) != 0) {
 		debug("pthread_mutex_lock error");
 	}
-	inv->ref_count--;
-	debug("%s", why);
+	int prev_ref_count = inv->ref_count;
+	inv->ref_count = inv->ref_count - 1;
+	debug("%lu: Decrease reference count on invitation %p (%d -> %d) %s",
+		pthread_self(), inv, prev_ref_count, inv->ref_count, why);
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&inv->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
@@ -124,7 +130,7 @@ int inv_accept(INVITATION *inv) {
 		return -1;
 	}
 	/* else, change state to ACCEPTED */
-	inv->state = 1;
+	inv->state = INV_ACCEPTED_STATE;
 	/* and create new game */
 	inv->game = game_create();
 	/* if game was nott successfully created then error */
@@ -150,19 +156,20 @@ int inv_close(INVITATION *inv, GAME_ROLE role) {
 		return -1;
 	}
 	/* if invitation state is not OPEN or ACCEPTED then error */
-	if(inv->state != INV_OPEN_STATE || inv->state != INV_ACCEPTED_STATE) {
-		debug("invitation state is not OPEN or ACCEPTED");
+	if(inv->state == INV_CLOSED_STATE) {
+		debug("invitation state %d is not OPEN or ACCEPTED", inv->state);
 		if(pthread_mutex_unlock(&inv->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
 		}
 		return -1;
 	}
-	/* check that a game exists (which should be true if OPEN/ACCEPTED inv) */
+	/* check that a game exists */
 	if(inv->game == NULL) {
+		inv->state = INV_CLOSED_STATE;
 		if(pthread_mutex_unlock(&inv->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
 		}
-		return -1;
+		return 0;
 	}
 	/* check if game is in progress */
 	int game_over = game_is_over(inv->game);
