@@ -86,13 +86,13 @@ void inv_unref(INVITATION *inv, char *why) {
 	inv->ref_count--;
 	debug("%lu: Decrease reference count on invitation %p (%d -> %d) %s",
 		pthread_self(), inv, prev_ref_count, inv->ref_count, why);
-	/* free invitation if ref count has reached zero */
-	if(inv->ref_count <= 0) {
-		free(inv);
-	}
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&inv->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
+	}
+	/* free invitation if ref count has reached zero */
+	if(inv->ref_count <= 0) {
+		free(inv);
 	}
 }
 
