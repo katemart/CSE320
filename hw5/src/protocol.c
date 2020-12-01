@@ -37,7 +37,7 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 	uint16_t p_size = ntohs(hdr->size);
 	/* check if packet has payload */
 	if(p_size > 0) {
-		*payloadp = calloc((p_size + 1),sizeof(char));
+		*payloadp = malloc(p_size * sizeof(char));
 		if(*payloadp == NULL) {
 			debug("rio_readn payload malloc error");
 			return -1;
