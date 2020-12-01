@@ -158,7 +158,7 @@ CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
 			if(strcmp(name, user) == 0) {
 				client = cr->c_list[i];
 				/* increment client ref count by one */
-				client_ref(client, "increase ref count due to client lookup");
+				client_ref(client, "for reference being returned by creg_lookup()");
 				break;
 			}
 		}
