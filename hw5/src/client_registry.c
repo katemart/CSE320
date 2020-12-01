@@ -114,7 +114,7 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 			debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(), client_get_fd(client), cr->num_clients);
 			/* decrement client count by one */
 			cr->num_clients--;
-			client_unref(client, "decrease count due to client unregistration");
+			client_unref(client, "decrease ref count due to client unregistration");
 			break;
 		} else {
 			/* else unlock mutex and return -1 */
@@ -191,7 +191,7 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
 			if(p != NULL) {
 				p_list[i] = p;
 				/* increase player ref count */
-				player_ref(p, "increase ref due to player being added to list of players");
+				player_ref(p, "increase ref count due to player being added to list of players");
 			}
 		}
 	}
