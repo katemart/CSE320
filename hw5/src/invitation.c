@@ -60,7 +60,10 @@ INVITATION *inv_ref(INVITATION *inv, char *why) {
 		return NULL;
 	}
 	int prev_ref_count = inv->ref_count;
-	inv->ref_count = inv->ref_count + 1;
+	if(prev_ref_count <= 0) {
+		prev_ref_count = 0;
+	}
+	inv->ref_count++;
 	debug("%lu: Increase reference count on invitation %p (%d -> %d) %s",
 		pthread_self(), inv, prev_ref_count, inv->ref_count, why);
 	/* unlock mutex */
@@ -77,9 +80,16 @@ void inv_unref(INVITATION *inv, char *why) {
 		debug("pthread_mutex_lock error");
 	}
 	int prev_ref_count = inv->ref_count;
-	inv->ref_count = inv->ref_count - 1;
+	if(prev_ref_count <= 0) {
+		prev_ref_count = 0;
+	}
+	inv->ref_count--;
 	debug("%lu: Decrease reference count on invitation %p (%d -> %d) %s",
 		pthread_self(), inv, prev_ref_count, inv->ref_count, why);
+	/* free invitation if ref count has reached zero */
+	if(inv->ref_count <= 0) {
+		free(inv);
+	}
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&inv->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
@@ -157,7 +167,7 @@ int inv_close(INVITATION *inv, GAME_ROLE role) {
 	}
 	/* if invitation state is not OPEN or ACCEPTED then error */
 	if(inv->state == INV_CLOSED_STATE) {
-		debug("invitation state %d is not OPEN or ACCEPTED", inv->state);
+		debug("invitation state is not OPEN or ACCEPTED");
 		if(pthread_mutex_unlock(&inv->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
 		}
