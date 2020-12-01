@@ -66,6 +66,7 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
 	/* create client */
 	CLIENT *client = client_create(cr, fd);
 	if(client == NULL) {
+		debug("error registering client");
 		if(pthread_mutex_unlock(&cr->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
 		}
@@ -101,6 +102,7 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 	}
 	/* if the num of clients is <= zero then error unregistering */
 	if(cr->num_clients <= 0) {
+		debug("there are no clients to unregister");
 		if(pthread_mutex_unlock(&cr->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
 		}
@@ -180,6 +182,9 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
 	p_list = malloc((cr->num_clients + 1) * sizeof(PLAYER *));
 	if(p_list == NULL) {
 		debug("error allocating space for player list");
+		if(pthread_mutex_unlock(&cr->mutex) != 0) {
+			debug("pthread_mutex_unlock error");
+		}
 		return NULL;
 	}
 	/* search through clients to find players */
