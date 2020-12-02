@@ -42,14 +42,14 @@ INVITATION *inv_create(CLIENT *source, CLIENT *target, GAME_ROLE source_role, GA
 	/* increment client ref counts */
 	client_ref(invitation->source, "as source of new invitation");
 	client_ref(invitation->target, "as target of new invitation");
-	/* increment inv ref count */
-	inv_ref(invitation, "for newly created invitation");
 	/* init mutex*/
 	if(pthread_mutex_init(&invitation->mutex, NULL) != 0) {
 		free(invitation);
 		debug("error initializing mutex");
 		return NULL;
 	}
+	/* increment inv ref count */
+	inv_ref(invitation, "for newly created invitation");
 	return invitation;
 }
 
@@ -86,6 +86,11 @@ void inv_unref(INVITATION *inv, char *why) {
 	inv->ref_count--;
 	debug("%lu: Decrease reference count on invitation %p (%d -> %d) %s",
 		pthread_self(), inv, prev_ref_count, inv->ref_count, why);
+	if(inv->ref_count <= 0) {
+		/* decrement client ref counts */
+		client_unref(inv->source, "because invitation is being freed");
+		client_unref(inv->target, "because invitation is being freed");
+	}
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&inv->mutex) != 0) {
 		debug("pthread_mutex_unlock error");

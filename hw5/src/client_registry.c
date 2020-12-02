@@ -112,11 +112,12 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		 /* if client is found, remove from list */
 		if(cr->c_list[i] == client) {
-			cr->c_list[i] = NULL;
 			debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(), client_get_fd(client), cr->num_clients);
 			/* decrement client count by one */
 			cr->num_clients--;
-			client_unref(client, "decrease ref count due to client unregistration");
+			client_unref(client, "because client is being unregistered");
+			/* remove from list */
+			cr->c_list[i] = NULL;
 			break;
 		} else {
 			/* else unlock mutex and return -1 */
@@ -196,7 +197,7 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
 			if(p != NULL) {
 				p_list[i] = p;
 				/* increase player ref count */
-				player_ref(p, "increase ref count due to player being added to list of players");
+				player_ref(p, "for reference being added to list of players");
 			}
 		}
 	}
@@ -222,6 +223,7 @@ void creg_shutdown_all(CLIENT_REGISTRY *cr) {
 	/* shut down client fds */
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		if(cr->c_list[i] != NULL) {
+			debug("Shutting down client %d", client_get_fd(cr->c_list[i]));
 			shutdown(client_get_fd(cr->c_list[i]), SHUT_RD);
 		}
 	}
