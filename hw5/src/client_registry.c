@@ -45,7 +45,19 @@ CLIENT_REGISTRY *creg_init() {
 }
 
 void creg_fini(CLIENT_REGISTRY *cr) {
-	debug("%lu: Finalize client registry", pthread_self());
+	/* lock mutex */
+	if(pthread_mutex_lock(&cr->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+	}
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		if(cr->c_list[i] != NULL) {
+			client_unref(cr->c_list[i], "because client registry is being finalized");
+		}
+	}
+	/* unlock mutex */
+	if(pthread_mutex_unlock(&cr->mutex) != 0) {
+		debug("pthread_mutex_unlock error");
+	}
 	/* destroy mutex and sem */
 	if(sem_destroy(&cr->sem) < 0) {
 		debug("error destroying semaphore");
@@ -54,6 +66,7 @@ void creg_fini(CLIENT_REGISTRY *cr) {
 		debug("error destroying mutex");
 	}
 	/* free client registry */
+	debug("%lu: Finalize client registry", pthread_self());
 	free(cr);
 }
 
@@ -112,10 +125,10 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		 /* if client is found, remove from list */
 		if(cr->c_list[i] == client) {
-			debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(), client_get_fd(client), cr->num_clients);
 			/* decrement client count by one */
 			cr->num_clients--;
 			client_unref(client, "because client is being unregistered");
+			debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(), client_get_fd(client), cr->num_clients);
 			/* remove from list */
 			cr->c_list[i] = NULL;
 			break;
