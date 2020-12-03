@@ -5,8 +5,6 @@
 #include "client_registry.h"
 #include "invitation.h"
 
-extern CLIENT_REGISTRY *client_registry;
-
 typedef struct invitation {
 	GAME *game;
 	int ref_count;
@@ -125,11 +123,13 @@ GAME *inv_get_game(INVITATION *inv) {
 	/* lock mutex */
 	if(pthread_mutex_lock(&inv->mutex) != 0) {
 		debug("pthread_mutex_lock error");
+		return NULL;
 	}
 	GAME *temp = inv->game;
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&inv->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
+		return NULL;
 	}
 	return temp;
 }
