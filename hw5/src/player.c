@@ -69,7 +69,7 @@ void player_unref(PLAYER *player, char *why) {
 		prev_ref_count = 0;
 	}
 	player->ref_count--;
-	debug("%lu: Derease reference count on player %p (%d -> %d) %s",
+	debug("%lu: Decrease reference count on player %p (%d -> %d) %s",
 		pthread_self(), player, prev_ref_count, player->ref_count, why);
 	if(player->ref_count <= 0) {
 		/* free associated resources */
