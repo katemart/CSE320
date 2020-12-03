@@ -90,7 +90,18 @@ char *player_get_name(PLAYER *player) {
 }
 
 int player_get_rating(PLAYER *player) {
-	return player->rating;
+	/* lock mutex */
+	if(pthread_mutex_lock(&player->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+		return -1;
+	}
+	int temp = player->rating;
+	/* unlock mutex */
+	if(pthread_mutex_unlock(&player->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+		return -1;
+	}
+	return temp;
 }
 
 void player_post_result(PLAYER *player1, PLAYER *player2, int result) {
