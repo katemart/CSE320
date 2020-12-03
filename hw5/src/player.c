@@ -94,5 +94,43 @@ int player_get_rating(PLAYER *player) {
 }
 
 void player_post_result(PLAYER *player1, PLAYER *player2, int result) {
-
+	/* lock mutex */
+	if(pthread_mutex_lock(&player1->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+	}
+	/* lock mutex */
+	if(pthread_mutex_lock(&player2->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+	}
+	/* get actual result */
+	double S1, S2;
+	if(result == 0) {
+		/* draw */
+		S1 = 0.5;
+		S2 = 0.5;
+	} else if(result == 1) {
+		/* player 1 wins */
+		S1 = 1.0;
+		S2 = 0.0;
+	} else if(result == 2) {
+		/* player 2 wins */
+		S1 = 0.0;
+		S2 = 1.0;
+	}
+	/* calculate score */
+	double E1 = (1.0 / (1.0 + pow(10, ((player2->rating - player1->rating) / 400))));
+	double E2 = (1.0 / (1.0 + pow(10, ((player1->rating - player2->rating) / 400))));
+	/* update ratings */
+	double R1 = (player1->rating + 32 * (S1 - E1));
+	double R2 = (player2->rating + 32 * (S2 - E2));
+	player1->rating = (int) R1;
+	player2->rating = (int) R2;
+	/* unlock mutex */
+	if(pthread_mutex_unlock(&player1->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+	}
+	/* unlock mutex */
+	if(pthread_mutex_unlock(&player2->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+	}
 }
