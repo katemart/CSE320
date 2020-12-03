@@ -7,7 +7,7 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 	/* attempt to send data */
 	bytes_sent = rio_writen(fd, hdr, sizeof(JEUX_PACKET_HEADER));
 	if(bytes_sent < 0) {
-		debug("rio_writen header error");
+		debug("EOF on fd: %d", fd);
 		return -1;
 	}
 	/* convert original size to host byte order to send payload */
@@ -16,11 +16,11 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 	if(p_size > 0) {
 		bytes_sent = rio_writen(fd, data, p_size);
 		if(bytes_sent < 0) {
-			debug("rio_writen payload error");
+			debug("EOF on fd: %d", fd);
 			return -1;
 		}
 	}
-	debug("SENDING TYPE %u, ID %u, ROLE %u, SIZE %u, SEC %u, NSEC %u", hdr->type, hdr->id,
+	debug("=> TYPE %u, ID %u, ROLE %u, SIZE %u, SEC %u, NSEC %u", hdr->type, hdr->id,
 		hdr->role, hdr->size, hdr->timestamp_sec, hdr->timestamp_nsec);
 	return 0;
 }
@@ -30,7 +30,7 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 	/* attempt to receive data */
 	bytes_rcvd = rio_readn(fd, hdr, sizeof(JEUX_PACKET_HEADER));
 	if(bytes_rcvd <= 0 || bytes_rcvd != sizeof(JEUX_PACKET_HEADER)) {
-		debug("rio_readn header error");
+		debug("EOF on fd: %d", fd);
 		return -1;
 	}
 	/* convert original size to host byte order to send payload */
@@ -44,12 +44,12 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 		}
 		bytes_rcvd = rio_readn(fd, *payloadp, p_size);
 		if(bytes_rcvd <= 0) {
-			debug("rio_readn payload error");
+			debug("EOF on fd: %d", fd);
 			free(payloadp);
 			return -1;
 		}
 	}
-	debug("RECEIVING TYPE %u, ID %u, ROLE %u, SIZE %u, SEC %u, NSEC %u", hdr->type, hdr->id,
+	debug("<= TYPE %u, ID %u, ROLE %u, SIZE %u, SEC %u, NSEC %u", hdr->type, hdr->id,
 		hdr->role, hdr->size, hdr->timestamp_sec, hdr->timestamp_nsec);
 	return 0;
 }
