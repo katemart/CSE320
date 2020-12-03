@@ -22,17 +22,11 @@ CLIENT_REGISTRY *creg_init() {
 		debug("error allocating space for creg");
 		return NULL;
 	}
-	/* set client count to zero */
-	cr->num_clients = 0;
 	/* init sem */
 	if(sem_init(&cr->sem, 0, 1) < 0) {
 		free(cr);
 		debug("error initializing semaphore");
 		return NULL;
-	}
-	/* init client list */
-	for(int i = 0; i < MAX_CLIENTS; i++) {
-		cr->c_list[i] = NULL;
 	}
 	/* init mutex*/
 	if(pthread_mutex_init(&cr->mutex, NULL) != 0) {
@@ -40,25 +34,17 @@ CLIENT_REGISTRY *creg_init() {
 		debug("error initializing mutex");
 		return NULL;
 	}
+	/* set client count to zero */
+	cr->num_clients = 0;
+	/* init client list */
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		cr->c_list[i] = NULL;
+	}
 	debug("%lu: Initialize client registry", pthread_self());
 	return cr;
 }
 
 void creg_fini(CLIENT_REGISTRY *cr) {
-	/* lock mutex */
-	if(pthread_mutex_lock(&cr->mutex) != 0) {
-		debug("pthread_mutex_lock error");
-	}
-	for(int i = 0; i < MAX_CLIENTS; i++) {
-		if(cr->c_list[i] != NULL) {
-			client_unref(cr->c_list[i], "because client registry is being finalized");
-		}
-	}
-	/* unlock mutex */
-	if(pthread_mutex_unlock(&cr->mutex) != 0) {
-		debug("pthread_mutex_unlock error");
-	}
-	/* destroy mutex and sem */
 	if(sem_destroy(&cr->sem) < 0) {
 		debug("error destroying semaphore");
 	}
@@ -95,9 +81,9 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
 		}
 	}
 	debug("%lu: Register client fd %d (total connected: %d)", pthread_self(), fd, cr->num_clients);
-	/* if the num of clients is zero, put a "marble" */
-	if(cr->num_clients == 0) {
-		V(&cr->sem);
+	/* lock it */
+	if(cr->num_clients == 1) {
+		P(&cr->sem);
 	}
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&cr->mutex) != 0) {
@@ -125,10 +111,11 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		 /* if client is found, remove from list */
 		if(cr->c_list[i] == client) {
+			debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(),
+				client_get_fd(client), cr->num_clients);
 			/* decrement client count by one */
 			cr->num_clients--;
 			client_unref(client, "because client is being unregistered");
-			debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(), client_get_fd(client), cr->num_clients);
 			/* remove from list */
 			cr->c_list[i] = NULL;
 			break;
@@ -140,9 +127,9 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 			return -1;
 		}
 	}
-	/* if the num of clients is > zero, take the "marble" */
-	if(cr->num_clients > 0) {
-		P(&cr->sem);
+	/* unlock it */
+	if(cr->num_clients == 0) {
+		V(&cr->sem);
 	}
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&cr->mutex) != 0) {
@@ -236,7 +223,7 @@ void creg_shutdown_all(CLIENT_REGISTRY *cr) {
 	/* shut down client fds */
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		if(cr->c_list[i] != NULL) {
-			debug("Shutting down client %d", client_get_fd(cr->c_list[i]));
+			debug("%lu: Shutting down client %d", pthread_self(), client_get_fd(cr->c_list[i]));
 			shutdown(client_get_fd(cr->c_list[i]), SHUT_RD);
 		}
 	}
