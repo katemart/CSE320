@@ -90,6 +90,9 @@ void inv_unref(INVITATION *inv, char *why) {
 		/* decrement client ref counts */
 		client_unref(inv->source, "because invitation is being freed");
 		client_unref(inv->target, "because invitation is being freed");
+		if(inv->game != NULL) {
+			game_unref(inv->game, "because invitation is being freed");
+		}
 	}
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&inv->mutex) != 0) {
