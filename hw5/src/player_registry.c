@@ -21,16 +21,16 @@ PLAYER_REGISTRY *preg_init(void) {
 		debug("error allocating space for preg");
 		return NULL;
 	}
-	/* set player count to zero */
-	pr->num_players = 0;
-	/* init players list */
-	pr->list = NULL;
 	/* init mutex */
 	if(pthread_mutex_init(&pr->mutex, NULL) != 0) {
 		free(pr);
 		debug("error initializing mutex");
 		return NULL;
 	}
+	/* set player count to zero */
+	pr->num_players = 0;
+	/* init players list */
+	pr->list = NULL;
 	debug("%lu: Initialize player registry", pthread_self());
 	return pr;
 }
@@ -41,18 +41,15 @@ void preg_fini(PLAYER_REGISTRY *preg) {
 	if(pthread_mutex_lock(&preg->mutex) != 0) {
 		debug("pthread_mutex_lock error");
 	}
-	/* free player registry */
 	struct p_list *temp;
 	struct p_list *root = preg->list;
 	while(root != NULL) {
 		temp = root;
 		root = root->next;
-		temp->prev = NULL;
-		temp->next = NULL;
 		player_unref(temp->player, "because player registry is being finalized");
 		free(temp);
 	}
-	/* lock mutex */
+	/* unlock mutex */
 	if(pthread_mutex_unlock(&preg->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
 	}
@@ -70,17 +67,7 @@ PLAYER *preg_register(PLAYER_REGISTRY *preg, char *name) {
 		debug("pthread_mutex_lock error");
 		return NULL;
 	}
-	/* copy name
-	char *new_name = strdup(name);
-	if(new_name == NULL) {
-		debug("error copying player name");
-		if(pthread_mutex_unlock(&preg->mutex) != 0) {
-			debug("pthread_mutex_unlock error");
-			return NULL;
-		}
-		return NULL;
-	} */
-	debug("Register player %s", name);
+	debug("%lu: Register player %s", pthread_self(), name);
 	struct p_list **root = &preg->list;
 	struct p_list *temp_prev = NULL;
 	/* search through each player registered first */
@@ -102,7 +89,7 @@ PLAYER *preg_register(PLAYER_REGISTRY *preg, char *name) {
 		temp_prev = (*root);
 		root = &((*root)->next);
 	}
-	debug("Player with that name does not yet exist");
+	debug("%lu: Player with that name does not yet exist", pthread_self());
 	/* allocate space for players list */
 	*root = malloc(sizeof(struct p_list));
 	if(*root == NULL) {
@@ -112,7 +99,7 @@ PLAYER *preg_register(PLAYER_REGISTRY *preg, char *name) {
 		}
 		return NULL;
 	}
-
+	/* create new player */
 	(*root)->next = NULL;
 	(*root)->prev = temp_prev;
 	if(temp_prev != NULL) {
