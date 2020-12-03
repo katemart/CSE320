@@ -137,11 +137,11 @@ void player_post_result(PLAYER *player1, PLAYER *player2, int result) {
 	player1->rating = (int) R1;
 	player2->rating = (int) R2;
 	/* unlock mutex */
-	if(pthread_mutex_unlock(&player1->mutex) != 0) {
+	if(pthread_mutex_unlock(&player2->mutex) != 0) {
 		debug("pthread_mutex_lock error");
 	}
 	/* unlock mutex */
-	if(pthread_mutex_unlock(&player2->mutex) != 0) {
+	if(pthread_mutex_unlock(&player1->mutex) != 0) {
 		debug("pthread_mutex_lock error");
 	}
 }
