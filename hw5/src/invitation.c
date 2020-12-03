@@ -1,7 +1,7 @@
 #include <stdlib.h>
-#include <pthread.h>
 
 #include "debug.h"
+#include "csapp.h"
 #include "client_registry.h"
 #include "invitation.h"
 
@@ -90,6 +90,7 @@ void inv_unref(INVITATION *inv, char *why) {
 		/* decrement client ref counts */
 		client_unref(inv->source, "because invitation is being freed");
 		client_unref(inv->target, "because invitation is being freed");
+		/* decrement game ref count (if there is a game) */
 		if(inv->game != NULL) {
 			game_unref(inv->game, "because invitation is being freed");
 		}
