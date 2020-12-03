@@ -75,7 +75,7 @@ int main(int argc, char* argv[]){
     sigemptyset(&s_action.sa_mask);
     s_action.sa_flags = 0;
     if (sigaction(SIGHUP, &s_action, NULL) == -1) {
-        fprintf(stderr, "SIGHUP error\n");
+        debug("SIGHUP error");
         terminate(EXIT_FAILURE);
     }
     /* attempt to start server */
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]){
         client_len = sizeof(struct sockaddr_storage);
         conn_fd = malloc(sizeof(int));
         if(conn_fd == NULL) {
-            fprintf(stderr, "conn_fd malloc error\n");
+            debug("conn_fd malloc error");
             terminate(EXIT_FAILURE);
         }
         if((*conn_fd = accept(listen_fd, (SA *)&client_addr, &client_len)) < 0) {
@@ -96,19 +96,18 @@ int main(int argc, char* argv[]){
             if(sighup_flag) {
                 free(conn_fd);
                 if(close(listen_fd) < 0) {
-                    fprintf(stderr, "close listen_fd error");
+                    debug("close listen_fd error");
                     terminate(EXIT_FAILURE);
                 }
-                fprintf(stderr, "SIGHUP caught\n");
                 terminate(EXIT_SUCCESS);
             }
             /* if not SIGHUP, something else went wrong */
             free(conn_fd);
             if(close(listen_fd) < 0) {
-                fprintf(stderr, "close listen_fd error");
+                debug("close listen_fd error");
                 terminate(EXIT_FAILURE);
             }
-            fprintf(stderr, "conn_fd accept error\n");
+            debug("conn_fd accept error");
             terminate(EXIT_FAILURE);
         }
         if(pthread_create(&tid, NULL, jeux_client_service, conn_fd) != 0) {
@@ -117,7 +116,7 @@ int main(int argc, char* argv[]){
         }
     }
     if(close(listen_fd) < 0) {
-        fprintf(stderr, "close listen_fd error");
+        debug("close listen_fd error");
         terminate(EXIT_FAILURE);
     }
     terminate(EXIT_SUCCESS);
