@@ -107,26 +107,29 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
 		}
 		return -1;
 	}
+	int i;
 	/* search for client to unregister */
-	for(int i = 0; i < MAX_CLIENTS; i++) {
+	for(i = 0; i < MAX_CLIENTS; i++) {
 		 /* if client is found, remove from list */
 		if(cr->c_list[i] == client) {
-			debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(),
-				client_get_fd(client), cr->num_clients);
-			/* decrement client count by one */
-			cr->num_clients--;
-			client_unref(client, "because client is being unregistered");
-			/* remove from list */
-			cr->c_list[i] = NULL;
 			break;
-		} else {
-			/* else unlock mutex and return -1 */
-			if(pthread_mutex_unlock(&cr->mutex) != 0) {
-				debug("pthread_mutex_unlock error");
-			}
-			return -1;
 		}
 	}
+	if(i >= MAX_CLIENTS) {
+		debug("%lu client not found %p", pthread_self(), client);
+		/* else unlock mutex and return -1 */
+		if(pthread_mutex_unlock(&cr->mutex) != 0) {
+			debug("pthread_mutex_unlock error");
+		}
+		return -1;
+	}
+	/* decrement client count by one */
+	cr->num_clients--;
+	debug("%lu: Unregister client fd %d (total connected: %d)", pthread_self(),
+		client_get_fd(client), cr->num_clients);
+	client_unref(client, "because client is being unregistered");
+	/* remove from list */
+	cr->c_list[i] = NULL;
 	/* unlock it */
 	if(cr->num_clients == 0) {
 		V(&cr->sem);
