@@ -152,7 +152,7 @@ int inv_accept(INVITATION *inv) {
 	inv->state = INV_ACCEPTED_STATE;
 	/* and create new game */
 	inv->game = game_create();
-	/* if game was nott successfully created then error */
+	/* if game was not successfully created then error */
 	if(inv->game == NULL) {
 		debug("error creating game");
 		if(pthread_mutex_unlock(&inv->mutex) != 0) {
@@ -175,15 +175,21 @@ int inv_close(INVITATION *inv, GAME_ROLE role) {
 		return -1;
 	}
 	/* if invitation state is not OPEN or ACCEPTED then error */
-	if(inv->state == INV_CLOSED_STATE) {
+	if(!(inv->state == INV_OPEN_STATE || inv->state == INV_ACCEPTED_STATE)) {
 		debug("invitation state is not OPEN or ACCEPTED");
 		if(pthread_mutex_unlock(&inv->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
 		}
 		return -1;
 	}
-	/* check that a game exists */
-	if(inv->game == NULL) {
+	/* if no game has been accepted and player tries to resign, then error */
+	if(inv->game == NULL && role != NULL_ROLE) {
+		if(pthread_mutex_unlock(&inv->mutex) != 0) {
+			debug("pthread_mutex_unlock error");
+		}
+		return -1;
+	} else if(inv->game == NULL) {
+		/* if no game has been accepted (ie decline) ? */
 		inv->state = INV_CLOSED_STATE;
 		if(pthread_mutex_unlock(&inv->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
