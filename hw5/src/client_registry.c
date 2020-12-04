@@ -216,6 +216,7 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
 
 void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
 	P(&cr->sem);
+	V(&cr->sem);
 }
 
 void creg_shutdown_all(CLIENT_REGISTRY *cr) {
