@@ -202,8 +202,8 @@ int game_is_over(GAME *game) {
 	/* check rows and cols */
 	for(int i = 0; i < 3; i++) {
 		/* rows */
-		if(game->game_state[3 * i] == game->game_state[3 * i + 1] &&
-			game->game_state[3 * i + 1]) {
+		if(game->game_state[3 * i] == game->game_state[(3 * i) + 1] &&
+			game->game_state[(3 * i) + 1] == game->game_state[(3 * i) + 2]) {
 			/* get who won */
 			if(game->game_state[3 * i] == 'X') {
 				game->winner = FIRST_PLAYER_ROLE;
@@ -293,45 +293,43 @@ GAME_ROLE game_get_winner(GAME *game) {
 }
 
 GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
-	debug("STR %c", str[0]);
 	/* allocate space for game move to be returned */
 	GAME_MOVE *move;
 	move = malloc(sizeof(GAME_MOVE));
 	if(move == NULL) {
 		return NULL;
 	}
-	int position;
-	//char temp_position = str[0];
+	int position = atoi(&str[0]);
 	/* check if given move is valid */
-	position = atoi(&str[0]);
 	if(position < 1 || position > 9) {
 		if(pthread_mutex_unlock(&game->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
 		}
 		return NULL;
 	}
-	debug("POSITION %d",  position);
 	if(str[1] != '\0') {
-		debug("HERE");
 		/* check when given move str is #<-X/O */
-		if(strcmp(&str[1], "<-X") == 0 && role != FIRST_PLAYER_ROLE) {
-			if(pthread_mutex_unlock(&game->mutex) != 0) {
-				debug("pthread_mutex_unlock error");
+		if(strcmp(&str[1], "<-X") == 0) {
+			if(role != FIRST_PLAYER_ROLE) {
+				if(pthread_mutex_unlock(&game->mutex) != 0) {
+					debug("pthread_mutex_unlock error");
+				}
+				return NULL;
 			}
-			return NULL;
-		} else if(strcmp(&str[1], "<-O") == 0 && role != SECOND_PLAYER_ROLE) {
-			if(pthread_mutex_unlock(&game->mutex) != 0) {
-				debug("pthread_mutex_unlock error");
+		} else if(strcmp(&str[1], "<-O") == 0) {
+			if(role != SECOND_PLAYER_ROLE) {
+				if(pthread_mutex_unlock(&game->mutex) != 0) {
+					debug("pthread_mutex_unlock error");
+				}
+				return NULL;
 			}
-			return NULL;
-		} else if(strncmp(&str[1], "<-", 2)) {
+		} else {
 			if(pthread_mutex_unlock(&game->mutex) != 0) {
 				debug("pthread_mutex_unlock error");
 			}
 			return NULL;
 		}
 	}
-	debug("END %d", position);
 	/* if move is valid, return move */
 	move->role = role;
 	move->game = game;
