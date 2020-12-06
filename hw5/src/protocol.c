@@ -20,8 +20,10 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 			return -1;
 		}
 	}
-	debug("=> TYPE %u, ID %u, ROLE %u, SIZE %u, SEC %u, NSEC %u", hdr->type, hdr->id,
-		hdr->role, hdr->size, hdr->timestamp_sec, hdr->timestamp_nsec);
+	debug("%lu: => TYPE %u, SIZE %u, ID %u, ROLE %u, PAYLOAD [%s], SEC %u, NSEC %u",
+		pthread_self(), hdr->type, hdr->size, hdr->id, hdr->role,
+		((*payloadp == NULL) ? "no payload" : (char *)*payloadp),
+		hdr->timestamp_sec, hdr->timestamp_nsec);
 	return 0;
 }
 
@@ -49,7 +51,9 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 			return -1;
 		}
 	}
-	debug("<= TYPE %u, ID %u, ROLE %u, SIZE %u, SEC %u, NSEC %u", hdr->type, hdr->id,
-		hdr->role, hdr->size, hdr->timestamp_sec, hdr->timestamp_nsec);
+	debug("%lu: <= TYPE %u, SIZE %u, ID %u, ROLE %u, PAYLOAD [%s], SEC %u, NSEC %u",
+		pthread_self(), hdr->type, hdr->size, hdr->id, hdr->role,
+		((*payloadp == NULL) ? "no payload" : (char *)*payloadp),
+		hdr->timestamp_sec, hdr->timestamp_nsec);
 	return 0;
 }
