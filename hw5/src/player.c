@@ -134,8 +134,6 @@ void player_post_result(PLAYER *player1, PLAYER *player2, int result) {
 	/* update ratings */
 	int R1 = player1->rating + (int)(32 * (S1 - E1));
 	int R2 = player2->rating + (int)(32 * (S2 - E2));
-	/* conserve total number of rating points */
-
 	player1->rating = R1;
 	player2->rating = R2;
 	/* unlock mutex */

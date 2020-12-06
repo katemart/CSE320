@@ -5,7 +5,6 @@
 #include "player_registry.h"
 
 typedef struct player_registry {
-	int num_players;
 	pthread_mutex_t mutex;
 	struct p_list {
 		PLAYER *player;
@@ -27,8 +26,6 @@ PLAYER_REGISTRY *preg_init(void) {
 		debug("error initializing mutex");
 		return NULL;
 	}
-	/* set player count to zero */
-	pr->num_players = 0;
 	/* init players list */
 	pr->list = NULL;
 	debug("%lu: Initialize player registry", pthread_self());
@@ -111,8 +108,6 @@ PLAYER *preg_register(PLAYER_REGISTRY *preg, char *name) {
 		/* increment player ref count by one */
 		player_ref(p, "for reference being retained by player registry");
 	}
-	/* increment player count by one */
-	preg->num_players++;
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&preg->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
