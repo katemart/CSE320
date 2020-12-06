@@ -49,7 +49,7 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 			return -1;
 		}
 	}
-	debug("%lu: => TYPE %u, SIZE %u, ID %u, ROLE %u, SEC %u, NSEC %u", pthread_self(),
+	debug("%lu: <= TYPE %u, SIZE %u, ID %u, ROLE %u, SEC %u, NSEC %u", pthread_self(),
 		hdr->type, hdr->size, hdr->id, hdr->role, hdr->timestamp_sec, hdr->timestamp_nsec);
 	return 0;
 }
