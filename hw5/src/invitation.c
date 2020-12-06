@@ -125,7 +125,10 @@ GAME *inv_get_game(INVITATION *inv) {
 		debug("pthread_mutex_lock error");
 		return NULL;
 	}
-	GAME *temp = inv->game;
+	GAME *temp = NULL;
+	if(inv->game != NULL) {
+		temp = inv->game;
+	}
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&inv->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
