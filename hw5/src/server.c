@@ -37,12 +37,10 @@ void *jeux_client_service(void *arg) {
 		if(received < 0) {
 			break;
 		}
-		/* LOGIN PACKET */
-		if(r_packet->type == JEUX_LOGIN_PKT) {
-			debug("%lu: [%d] LOGIN packet received", pthread_self(), fd);
-			 /* check if login has been processed already */
-			if(player == NULL) {
-				/* if login hasn't been called, login */
+		/* FIRST TIME PROCESSING LOGIN PACKET */
+		if(player == NULL) {
+			/* LOGIN PACKET */
+			if(r_packet->type == JEUX_LOGIN_PKT) {
 				player = preg_register(player_registry, payloadp);
 				if(player == NULL) {
 					debug("error creating player");
@@ -61,37 +59,51 @@ void *jeux_client_service(void *arg) {
 					}
 				}
 			} else {
-				/* else if login has been already called, error */
-				debug("%lu: [%d] Already logged in (player %p [%p])", pthread_self(),
-					fd, player, payloadp);
+				debug("%lu: [%d] Login required", pthread_self(), fd);
 				if(client_send_nack(client) < 0) {
 					debug("error sending nack");
 				}
 			}
 		}
-		/* USERS PACKET */
-		else if(r_packet->type == JEUX_USERS_PKT) {
-			/* if login hasn't been called, send NACK */
-			if(player == NULL) {
+		/* LOGIN PACKET HAS ALREADY BEEN PROCESSED */
+		else {
+			/* LOGIN PACKET */
+			if(r_packet->type == JEUX_LOGIN_PKT) {
+				debug("%lu: [%d] Already logged in (player %p [%s])", pthread_self(),
+					fd, player, (char *)payloadp);
 				if(client_send_nack(client) < 0) {
 					debug("error sending nack");
 				}
-			} else {
-				/* if login has been processed, show users */
+			}
+			/* USERS PACKET */
+			else if(r_packet->type == JEUX_USERS_PKT) {
+
+			}
+			/* INVITE PACKET */
+			else if(r_packet->type == JEUX_INVITE_PKT) {
+
+			}
+			/* REVOKE PACKET */
+			else if(r_packet->type == JEUX_REVOKE_PKT) {
+
+			}
+			/* DECLINE PACKET */
+			else if(r_packet->type == JEUX_DECLINE_PKT) {
+
+			}
+			/* ACCEPT PACKET */
+			else if(r_packet->type == JEUX_ACCEPT_PKT) {
+
+			}
+			/* MOVE PACKET */
+			else if(r_packet->type == JEUX_MOVE_PKT) {
+
+			}
+			/* RESIGN PACKET */
+			else if(r_packet->type == JEUX_RESIGN_PKT) {
 
 			}
 		}
-		/* INVITE PACKET */
-
-		/* REVOKE PACKET */
-
-		/* DECLINE PACKET */
-
-		/* ACCEPT PACKET */
-
-		/* MOVE PACKET */
-
-		/* RESIGN PACKET */
 	}
 	/* decrease ref count on player (if any) */
 	if(player != NULL) {
