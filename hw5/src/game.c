@@ -148,6 +148,7 @@ int game_resign(GAME *game, GAME_ROLE role) {
 	} else {
 		game->winner = FIRST_PLAYER_ROLE;
 	}
+	game->game_over = 1;
 	debug("%lu: : Resignation of game %p by %d", pthread_self(), game, role);
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&game->mutex) != 0) {
@@ -188,22 +189,15 @@ int game_is_over(GAME *game) {
 	/* lock mutex */
 	if(pthread_mutex_lock(&game->mutex) != 0) {
 		debug("pthread_mutex_lock error");
-		return -1;
+		return game->game_over;;
 	}
-	int temp = game->game_over;
-	/* unlock mutex */
-	if(pthread_mutex_unlock(&game->mutex) != 0) {
-		debug("pthread_mutex_unlock error");
-		return -1;
-	}
-	return temp;
-}
-
-GAME_ROLE game_get_winner(GAME *game) {
-	/* lock mutex */
-	if(pthread_mutex_lock(&game->mutex) != 0) {
-		debug("pthread_mutex_lock error");
-		return NULL_ROLE;
+	/* check if game is already over */
+	if(game->game_over == 1) {
+		/* unlock mutex */
+		if(pthread_mutex_unlock(&game->mutex) != 0) {
+			debug("pthread_mutex_unlock error");
+		}
+		return game->game_over;
 	}
 	/* check rows and cols */
 	for(int i = 0; i < 3; i++) {
@@ -213,11 +207,13 @@ GAME_ROLE game_get_winner(GAME *game) {
 			/* get who won */
 			if(game->game_state[3 * i] == 'X') {
 				game->winner = FIRST_PLAYER_ROLE;
-			} else {
+				/* record game as over */
+				game->game_over = 1;
+			} else if(game->game_state[3 * i] == 'O'){
 				game->winner = SECOND_PLAYER_ROLE;
+				/* record game as over */
+				game->game_over = 1;
 			}
-			/* record game as over */
-			game->game_over = 1;
 		}
 		/* cols */
 		if(game->game_state[i] == game->game_state[i + 3] &&
@@ -225,11 +221,13 @@ GAME_ROLE game_get_winner(GAME *game) {
 			/* get who won */
 			if(game->game_state[i] == 'X') {
 				game->winner = FIRST_PLAYER_ROLE;
-			} else {
+				/* record game as over */
+				game->game_over = 1;
+			} else if(game->game_state[i] == 'O') {
 				game->winner = SECOND_PLAYER_ROLE;
+				/* record game as over */
+				game->game_over = 1;
 			}
-			/* record game as over */
-			game->game_over = 1;
 		}
 	}
 	/* check diagonals */
@@ -238,22 +236,26 @@ GAME_ROLE game_get_winner(GAME *game) {
 		/* get who won */
 			if(game->game_state[0] == 'X') {
 				game->winner = FIRST_PLAYER_ROLE;
-			} else {
+				/* record game as over */
+				game->game_over = 1;
+			} if(game->game_state[0] == 'O') {
 				game->winner = SECOND_PLAYER_ROLE;
+				/* record game as over */
+				game->game_over = 1;
 			}
-			/* record game as over */
-			game->game_over = 1;
 	}
 	if(game->game_state[2] == game->game_state[4] &&
 		game->game_state[4] == game->game_state[6]) {
 		/* get who won */
-			if(game->game_state[0] == 'X') {
+			if(game->game_state[2] == 'X') {
 				game->winner = FIRST_PLAYER_ROLE;
-			} else {
+				/* record game as over */
+				game->game_over = 1;
+			} if(game->game_state[2] == 'O') {
 				game->winner = SECOND_PLAYER_ROLE;
+				/* record game as over */
+				game->game_over = 1;
 			}
-			/* record game as over */
-			game->game_over = 1;
 	}
 	/* check for a draw */
 	int taken;
@@ -262,12 +264,26 @@ GAME_ROLE game_get_winner(GAME *game) {
 			taken++;
 		}
 	}
-	if(taken == 8 && game->game_over == 0) {
+	if(taken == 9 && game->game_over == 0) {
 		game->winner = NULL_ROLE;
 		/* record game as over */
 		game->game_over = 1;
 	}
-	GAME_ROLE temp = game->winner;
+	/* unlock mutex */
+	if(pthread_mutex_unlock(&game->mutex) != 0) {
+		debug("pthread_mutex_unlock error");
+		return game->game_over;
+	}
+	return game->game_over;
+}
+
+GAME_ROLE game_get_winner(GAME *game) {
+	/* lock mutex */
+	if(pthread_mutex_lock(&game->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+		return NULL_ROLE;
+	}
+	int temp = game->winner;
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&game->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
@@ -277,6 +293,7 @@ GAME_ROLE game_get_winner(GAME *game) {
 }
 
 GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
+	debug("STR %c", str[0]);
 	/* allocate space for game move to be returned */
 	GAME_MOVE *move;
 	move = malloc(sizeof(GAME_MOVE));
@@ -284,32 +301,37 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
 		return NULL;
 	}
 	int position;
-	char temp_position = str[0];
+	//char temp_position = str[0];
 	/* check if given move is valid */
-	position = atoi(&temp_position);
+	position = atoi(&str[0]);
 	if(position < 1 || position > 9) {
 		if(pthread_mutex_unlock(&game->mutex) != 0) {
 			debug("pthread_mutex_unlock error");
 		}
 		return NULL;
 	}
-	/* check when given move str is #<-X/O */
-	if(strcmp(&str[1], "<-X") == 0 && role != FIRST_PLAYER_ROLE) {
-		if(pthread_mutex_unlock(&game->mutex) != 0) {
-			debug("pthread_mutex_unlock error");
+	debug("POSITION %d",  position);
+	if(str[1] != '\0') {
+		debug("HERE");
+		/* check when given move str is #<-X/O */
+		if(strcmp(&str[1], "<-X") == 0 && role != FIRST_PLAYER_ROLE) {
+			if(pthread_mutex_unlock(&game->mutex) != 0) {
+				debug("pthread_mutex_unlock error");
+			}
+			return NULL;
+		} else if(strcmp(&str[1], "<-O") == 0 && role != SECOND_PLAYER_ROLE) {
+			if(pthread_mutex_unlock(&game->mutex) != 0) {
+				debug("pthread_mutex_unlock error");
+			}
+			return NULL;
+		} else if(strncmp(&str[1], "<-", 2)) {
+			if(pthread_mutex_unlock(&game->mutex) != 0) {
+				debug("pthread_mutex_unlock error");
+			}
+			return NULL;
 		}
-		return NULL;
-	} else if(strcmp(&str[1], "<-O") == 0 && role != SECOND_PLAYER_ROLE) {
-		if(pthread_mutex_unlock(&game->mutex) != 0) {
-			debug("pthread_mutex_unlock error");
-		}
-		return NULL;
-	} else if(strncmp(&str[1], "<-", 2)) {
-		if(pthread_mutex_unlock(&game->mutex) != 0) {
-			debug("pthread_mutex_unlock error");
-		}
-		return NULL;
 	}
+	debug("END %d", position);
 	/* if move is valid, return move */
 	move->role = role;
 	move->game = game;
