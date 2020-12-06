@@ -49,8 +49,8 @@ PLAYER *player_ref(PLAYER *player, char *why) {
 		prev_ref_count = 0;
 	}
 	player->ref_count++;
-	debug("%lu: Increase reference count on player %p (%d -> %d) %s",
-		pthread_self(), player, prev_ref_count, player->ref_count, why);
+	debug("%lu: Increase reference count on player %p [%s] (%d -> %d) %s",
+		pthread_self(), player, player->username, prev_ref_count, player->ref_count, why);
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&player->mutex) != 0) {
 		debug("pthread_mutex_lock error");
@@ -69,8 +69,8 @@ void player_unref(PLAYER *player, char *why) {
 		prev_ref_count = 0;
 	}
 	player->ref_count--;
-	debug("%lu: Decrease reference count on player %p (%d -> %d) %s",
-		pthread_self(), player, prev_ref_count, player->ref_count, why);
+	debug("%lu: Decrease reference count on player %p [%s] (%d -> %d) %s",
+		pthread_self(), player, player->username, prev_ref_count, player->ref_count, why);
 	if(player->ref_count <= 0) {
 		/* free associated resources */
 		free(player->username);
