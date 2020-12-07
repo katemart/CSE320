@@ -145,11 +145,12 @@ int game_resign(GAME *game, GAME_ROLE role) {
 	}
 	if(role == FIRST_PLAYER_ROLE) {
 		game->winner = SECOND_PLAYER_ROLE;
-	} else {
+		game->game_over = 1;
+	} else if(role == SECOND_PLAYER_ROLE) {
 		game->winner = FIRST_PLAYER_ROLE;
+		game->game_over = 1;
 	}
-	game->game_over = 1;
-	debug("%lu: : Resignation of game %p by %d", pthread_self(), game, role);
+	debug("%lu: Resignation of game %p by %d", pthread_self(), game, role);
 	/* unlock mutex */
 	if(pthread_mutex_unlock(&game->mutex) != 0) {
 		debug("pthread_mutex_unlock error");
@@ -189,7 +190,7 @@ int game_is_over(GAME *game) {
 	/* lock mutex */
 	if(pthread_mutex_lock(&game->mutex) != 0) {
 		debug("pthread_mutex_lock error");
-		return game->game_over;;
+		return game->game_over;
 	}
 	/* check if game is already over */
 	if(game->game_over == 1) {
@@ -238,7 +239,7 @@ int game_is_over(GAME *game) {
 				game->winner = FIRST_PLAYER_ROLE;
 				/* record game as over */
 				game->game_over = 1;
-			} if(game->game_state[0] == 'O') {
+			} else if(game->game_state[0] == 'O') {
 				game->winner = SECOND_PLAYER_ROLE;
 				/* record game as over */
 				game->game_over = 1;
@@ -251,14 +252,14 @@ int game_is_over(GAME *game) {
 				game->winner = FIRST_PLAYER_ROLE;
 				/* record game as over */
 				game->game_over = 1;
-			} if(game->game_state[2] == 'O') {
+			} else if(game->game_state[2] == 'O') {
 				game->winner = SECOND_PLAYER_ROLE;
 				/* record game as over */
 				game->game_over = 1;
 			}
 	}
 	/* check for a draw */
-	int taken;
+	int taken = 0;
 	for(int i = 0; i < 9; i++) {
 		if(game->game_state[i] != ' ') {
 			taken++;

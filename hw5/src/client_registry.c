@@ -215,6 +215,14 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
 }
 
 void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
+	/* lock mutex
+	if(pthread_mutex_lock(&cr->mutex) != 0) {
+		debug("pthread_mutex_lock error");
+	}
+	 unlock mutex
+	if(pthread_mutex_unlock(&cr->mutex) != 0) {
+		debug("pthread_mutex_unlock error");
+	} */
 	P(&cr->sem);
 	V(&cr->sem);
 }
