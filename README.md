@@ -1,42 +1,14 @@
-# KATHERYN MARTINEZ HERNANDEZ
-## ***REMOVED***
-:skull:
-EUGENE STARK - 01
+# CSE320
+various projects written in C
 
-ACADEMIC HONESTY STATEMENT
-================================================================================
-I certify the following:
+hw0 - simple assignment to get familiar with Git and Linux commands.
 
-1. All files hosted in this repository at any time, including any written
-material and code, are entirely of my own work. The only exception permitted to
-this rule is if the Professor(s) give explicit, written permission, in the
-assignment handout, on the webpage/PIAZZA, or in E-mail, to use or adapt other
-source code into my work. In this case, the origins of all such code is clearly
-cited in my files.
+hw1 - command line utility to synthesize audio data containing Dual-Tone Multi-frequency (DTMF) signals and to detect DTMF signals in audio data. Implements a collection of functions with a focus on input/output, bitwise manipulation, and the use of pointers.
 
-2. I have not shared, transmitted, or received source code written for this
-class (including in any semester) from anyone else except the Professor(s) and
-the TAs. This includes both electronic forms (E-mail or downloading), as well as
-written or printed source code.
+hw2 - debug and extend an already existing old program called "finddup" written by Bill Davidsen of GE Corporate R&D center. Focuses on the importance of maintaining and debugging existing C code, implementation of memory management and pointers, and use of gdb and valgrind as well as the C standard I/O library.
 
-3. Except in the case of explicit written permission given by the Professor(s),
-I have not included in my repository any source code obtained from a textbook,
-downloaded from the Internet, extracted from a software package or source code
-library, or from any other similar source.
+hw3 - create an allocator for the x86-64 architecture. Implements a collection of functions to simulate malloc, realloc, and free memory allocation functions in C. Focuses on the use of varying structures to simulate "singly-linked lists" and "doubly-linked lists", memory padding and alignment, and unit testing.
 
-I understand that the appearance of extremely similar code fragments in more
-than one homework submission will be treated as evidence that code has been
-shared and an academic dishonesty case will be filed against me.
+hw4 - create a program called "Legion", which manages a collection of "daemon" processes that implement various kinds of services in order to get familiar with low-level Unix/POSIX system calls. Implements use of process execution, signal handling, and I/O redirection.
 
-I understand that code fragments can be extremely similar even if they are
-formatted differently and use different identifiers/labels/variables. The
-appearance of extremely similar code fragments that differ in this way will be
-regarded as evidence of an attempt to conceal that sharing has taken place.
-
-When in doubt about whether or not I am permitted to use particular source
-materials, I will obtain written permission from the Professor(s), in advance of
-my submission. Such permission is best requested and obtained by E-mail to
-cse320@cs.stonybrook.edu
-================================================================================
-Signed:
-Fri 21 Aug 2020 02:06:48 AM UTC - Katheryn Martinez Hernandez
+hw5 - create a simple game server that allows users to play each other in a two-player game in order to become familiar with low-level POSIX threads, multi-threading safety, concurrency guarantees, and networking. Implements a collection of functions that use basic socket programming, thread execution, mutexes and semaphores, and concurrent data structures.
